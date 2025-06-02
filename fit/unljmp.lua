@@ -1,85 +1,141 @@
---[[ 
-    fit/unljmp.lua
-    Modular Unlimited Jump untuk HXEL v2.0
-    Di‐load via loadstring dari main script.
+--[[
+  fit/unljmp.lua
+  Modular Unlimited Jump (Auto Jump) untuk HXEL v2.0
+  – Menambahkan kemampuan auto‐jump terus‐menerus
+  – Kecepatan (jumps per detik) dapat di‐set melalui module.SetSpeed()
+  
+  Cara pakai:
+    local unljmp = loadstring(game:HttpGet("https://raw.githubusercontent.com/RABZBOT/RABZBOT/main/fit/unljmp.lua", true))()
+    -- (1) Set kecepatan auto‐jump (opsional, default: 5 jumps per detik)
+    unljmp.SetSpeed(10)
+    -- (2) Aktifkan auto‐jump
+    unljmp.Enable()
+    -- (3) Jika ingin mematikan:
+    unljmp.Disable()
+    -- (4) Saat unloading total, panggil Destroy()
+    unljmp.Destroy()
 --]]
 
 local module = {}
 
 -- Services
 local Players     = game:GetService("Players")
-local UserInput   = game:GetService("UserInputService")
 local RunService  = game:GetService("RunService")
 
--- References (akan di‐update otomatis saat respawn)
+-- References karakter (akan di‐update otomatis saat respawn)
 local player       = Players.LocalPlayer
 local character    = player.Character or player.CharacterAdded:Wait()
 local humanoid     = character:WaitForChild("Humanoid")
 
--- Flag internal
-local _enabled        = false
-local _connection     = nil
-local _respawnListener = nil
+-- Internal flag dan koneksi
+local _enabled         = false
+local _heartbeatConn   = nil
+local _respawnConn     = nil
 
--- Debounce supaya tidak men‐spam ChangeState
-local DEBOUNCE_TIME = 0.1
-local lastJumpTime  = 0
+-- Kecepatan auto‐jump (jumps per detik)
+-- Default: 5 jumps per detik (interval 0.2 detik)
+local jumpSpeed        = 5
+local jumpInterval     = 1 / jumpSpeed
 
--- Function untuk update reference saat respawn
+-- Accumulator untuk menghitung waktu antara jump
+local timeAccumulator = 0
+
+--------------------------------------------------------------------------------
+-- Fungsi internal: update referensi humanoid saat karakter respawn
+--------------------------------------------------------------------------------
 local function onCharacterAdded(char)
     character = char
     humanoid  = character:WaitForChild("Humanoid")
-    -- Tidak langsung membuat koneksi di sini,
-    -- tapi jika fitur _enabled sudah true, buat ulang listener:
+    
+    -- Jika fitur sedang aktif, pastikan heartbeat loop dijalankan ulang
     if _enabled then
-        module.Enable()
+        -- Stop loop lama (jika masih ada)
+        if _heartbeatConn then
+            _heartbeatConn:Disconnect()
+            _heartbeatConn = nil
+        end
+        -- Reset accumulator
+        timeAccumulator = 0
+        -- Buat koneksi baru
+        _heartbeatConn = RunService.Heartbeat:Connect(function(dt)
+            if not _enabled or not humanoid or not humanoid.Parent then return end
+            timeAccumulator = timeAccumulator + dt
+            if timeAccumulator >= jumpInterval then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                timeAccumulator = timeAccumulator - jumpInterval
+            end
+        end)
     end
 end
 
--- Inisialisasi listener respawn
-_respawnListener = player.CharacterAdded:Connect(onCharacterAdded)
+-- Pasang listener respawn pertama kali
+_respawnConn = player.CharacterAdded:Connect(onCharacterAdded)
 
--- Fungsi utama untuk _listen_ JumpRequest
-local function onJumpRequest()
-    if not _enabled or not humanoid or not humanoid.Parent then
+--------------------------------------------------------------------------------
+-- Publik: SetSpeed(n)
+-- Mengubah kecepatan auto‐jump dalam "jumps per detik".
+-- Contoh: SetSpeed(10) → interval 0.1 detik
+-- Jika diberikan nilai <= 0 atau non-number, fungsi akan diabaikan.
+--------------------------------------------------------------------------------
+function module.SetSpeed(n)
+    if type(n) ~= "number" or n <= 0 then
+        warn("[unljmp] SetSpeed(): nilai harus > 0 (number). Ditemukan:", n)
         return
     end
-    local now = tick()
-    if now - lastJumpTime >= DEBOUNCE_TIME then
-        -- Ubah state ke Jumping
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        lastJumpTime = now
-    end
+    jumpSpeed    = n
+    jumpInterval = 1 / jumpSpeed
 end
 
--- Enable unlimited jump
+--------------------------------------------------------------------------------
+-- Publik: Enable()
+-- Mengaktifkan auto‐jump. Jika sudah aktif, panggilan berikutnya akan diabaikan.
+--------------------------------------------------------------------------------
 function module.Enable()
     if _enabled then return end
+    -- Pastikan humanoid valid
     if not humanoid or not humanoid.Parent then
-        -- Jika sudah dipanggil sebelum karakter muncul, tunggu karakter
         character = player.Character or player.CharacterAdded:Wait()
         humanoid  = character:WaitForChild("Humanoid")
     end
-    _connection = UserInput.JumpRequest:Connect(onJumpRequest)
+
+    -- Reset accumulator
+    timeAccumulator = 0
+
+    -- Buat koneksi Heartbeat loop
+    _heartbeatConn = RunService.Heartbeat:Connect(function(dt)
+        if not _enabled or not humanoid or not humanoid.Parent then return end
+        timeAccumulator = timeAccumulator + dt
+        if timeAccumulator >= jumpInterval then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            timeAccumulator = timeAccumulator - jumpInterval
+        end
+    end)
+
     _enabled = true
 end
 
--- Disable unlimited jump
+--------------------------------------------------------------------------------
+-- Publik: Disable()
+-- Mematikan auto‐jump. Jika belum aktif, panggilan berikutnya akan diabaikan.
+--------------------------------------------------------------------------------
 function module.Disable()
     if not _enabled then return end
-    if _connection then
-        _connection:Disconnect()
-        _connection = nil
+    if _heartbeatConn then
+        _heartbeatConn:Disconnect()
+        _heartbeatConn = nil
     end
     _enabled = false
 end
 
--- Cleanup sebelum modul di‐destroy (jika perlu)
+--------------------------------------------------------------------------------
+-- Publik: Destroy()
+-- Membersihkan semua koneksi (Heartbeat & Respawn listener) sebelum modul di‐unload.
+--------------------------------------------------------------------------------
 function module.Destroy()
     module.Disable()
-    if _respawnListener then
-        _respawnListener:Disconnect()
-        _respawnListener = nil
+    if _respawnConn then
+        _respawnConn:Disconnect()
+        _respawnConn = nil
     end
 end
 
