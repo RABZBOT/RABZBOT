@@ -209,10 +209,48 @@ do
     end)
 end
 
+-- Tambahkan di bagian pembuatan TAB “test2” agar berisi fitur teleport ketinggian
+-- Asumsi: Anda sudah memuat Rayfield dan membuat Window sebelumnya
+
 -- ─── TAB "test2" ───────────────────────────────────────────────────────────
 local Test2Tab = Window:CreateTab("test2", nil)
-Test2Tab:CreateSection("Pengaturan Test 2")
-Test2Tab:CreateParagraph({
-    Title   = "Info Test2",
-    Content = "Konten test2 di sini."
+Test2Tab:CreateSection("Teleport Ketinggian")
+
+-- Tombol Teleport +1000Y
+Test2Tab:CreateButton({
+    Name = "Teleport +1000Y",
+    Callback = function()
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos = root.Position
+            root.CFrame = CFrame.new(pos.X, pos.Y + 1000, pos.Z)
+        end
+    end
+})
+
+-- Tombol Teleport +5000Y
+Test2Tab:CreateButton({
+    Name = "Teleport +5000Y",
+    Callback = function()
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos = root.Position
+            root.CFrame = CFrame.new(pos.X, pos.Y + 5000, pos.Z)
+        end
+    end
+})
+
+-- Tombol Teleport +10000Y
+Test2Tab:CreateButton({
+    Name = "Teleport +10000Y",
+    Callback = function()
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos = root.Position
+            root.CFrame = CFrame.new(pos.X, pos.Y + 10000, pos.Z)
+        end
+    end
 })
