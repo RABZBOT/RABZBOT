@@ -316,13 +316,14 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Ditingkatkan Lagi) ────────────────────────────────────────
+-- ─── TAB "Auto" (Ditingkatkan Lagi untuk FPS Roblox) ────────────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock")
 
 -- State untuk Auto Lock
-local lockEnabled = false
-local lockRadius  = 50
+local lockEnabled     = false
+local lockRadius      = 50
+local targetPartOption = "Head"  -- Default: kunci ke kepala
 
 -- Toggle untuk mengaktifkan atau mematikan Auto Lock
 AutoTab:CreateToggle({
@@ -341,33 +342,51 @@ AutoTab:CreateSlider({
     Range        = {0, 500},
     Increment    = 5,
     Suffix       = " studs",
-    CurrentValue = 50,
+    CurrentValue = lockRadius,
     Flag         = "LockRadius",
     Callback     = function(value)
         lockRadius = value
     end
 })
 
--- Fungsi bantu untuk memeriksa apakah target bisa di-lock:
--- 1) Bukan teman (friend)
--- 2) Tidak memiliki ForceField (immune)
--- 3) Memiliki Humanoid dan Health > 0 (tidak mati atau nol darah)
-local function canBeTargeted(localPlayer, otherPlayer)
-    -- Pastikan karakter ada
-    local otherChar = otherPlayer.Character
-    if not otherChar then return false end
+-- Dropdown untuk memilih Part target: "Head" atau "Body"
+AutoTab:CreateDropdown({
+    Name     = "Target Part",
+    Flag     = "TargetPartOption",
+    Options  = {"Head", "Body"},
+    Current  = targetPartOption,
+    Multi    = false,
+    Callback = function(option)
+        targetPartOption = option
+    end
+})
 
-    -- 1) Cek friend
+-- Fungsi bantu: periksa apakah pemain dapat dijadikan target
+-- Kriteria:
+-- 1) Bukan teman (friend) dan bukan satu Team (jika game pakai Teams)
+-- 2) Tidak memiliki ForceField (menandakan sedang immune)
+-- 3) Memiliki Humanoid dan Health > 0 (tidak mati atau spawn-protected)
+local function canBeTargeted(localPlayer, otherPlayer)
+    if not otherPlayer.Character then
+        return false
+    end
+
+    -- 1) Cek friend / team
     if localPlayer:IsFriendsWith(otherPlayer.UserId) then
         return false
     end
+    if localPlayer.Team and otherPlayer.Team and localPlayer.Team == otherPlayer.Team then
+        return false
+    end
+
+    local otherChar = otherPlayer.Character
 
     -- 2) Cek ForceField
     if otherChar:FindFirstChild("ForceField") then
         return false
     end
 
-    -- 3) Cek Humanoid dan Health
+    -- 3) Cek Humanoid dan Health > 0
     local humanoid = otherChar:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then
         return false
@@ -376,8 +395,7 @@ local function canBeTargeted(localPlayer, otherPlayer)
     return true
 end
 
--- Fungsi untuk menemukan pemain terdekat (selain diri sendiri) dalam radius,
--- dengan pengecekan canBeTargeted()
+-- Fungsi menemukan pemain terdekat dalam radius, dengan pengecekan canBeTargeted()
 local function findNearestTarget()
     local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
@@ -385,8 +403,8 @@ local function findNearestTarget()
         return nil
     end
 
-    local rootPos = localPlayer.Character.HumanoidRootPart.Position
-    local nearestDist = lockRadius
+    local rootPos      = localPlayer.Character.HumanoidRootPart.Position
+    local nearestDist  = lockRadius
     local nearestPlayer = nil
 
     for _, other in ipairs(Players:GetPlayers()) do
@@ -422,9 +440,16 @@ do
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
                 if targetHum and targetHum.Health > 0 then
-                    local targetPos = target.Character.HumanoidRootPart.Position
-                    local camPos    = camera.CFrame.Position
-                    camera.CFrame   = CFrame.new(camPos, targetPos)
+                    local targetPos
+                    -- Pilih titik target: Head atau HumanoidRootPart
+                    if targetPartOption == "Head" and target.Character:FindFirstChild("Head") then
+                        targetPos = target.Character.Head.Position
+                    else
+                        targetPos = target.Character.HumanoidRootPart.Position
+                    end
+                    -- Kunci kamera menghadap targetPos
+                    local camPos = camera.CFrame.Position
+                    camera.CFrame = CFrame.new(camPos, targetPos)
                 end
             end
         end
