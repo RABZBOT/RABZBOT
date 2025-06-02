@@ -1,92 +1,71 @@
--- Memuat layanan Roblox
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-
--- Muat library Rayfield dari URL
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
-
--- Buat jendela utama HXEL
+-- Memuat library Rayfield dan membuat jendela utama
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
-    Name = "HXEL",
-    LoadingTitle = "HXEL Memuat...",
-    LoadingSubtitle = "HXEL GUI",
-    ConfigurationSaving = {
-        Enabled = true,
-        FileName = "HXEL_Config"
-    },
-    Discord = {
-        Enabled = false
-    },
-    KeySystem = false
+    Name = "HXEL", 
+    LoadingTitle = "HXEL Menyala", 
+    LoadingSubtitle = "Delta Executor"
 })
 
--- Tab: Stats
-local StatsTab = Window:CreateTab("Stats", 4483362458)
-StatsTab:CreateSection("Informasi Pemain")
+-- Membuat tab "Stats"
+local StatsTab = Window:CreateTab("Stats", nil)
+StatsTab:CreateSection("Data Statistik")
 
--- Label untuk koordinat pemain
-local posLabel = StatsTab:CreateLabel("Koordinat: (0, 0, 0)", 4483362458, Color3.fromRGB(255,255,255), false)
-
--- Tombol minimize untuk menyembunyikan GUI
-StatsTab:CreateButton({
-    Name = "-",
-    Callback = function()
-        Rayfield:SetVisibility(false)  -- Sembunyikan GUI utama:contentReference[oaicite:6]{index=6}
-        screenGui.Enabled = true       -- Tampilkan tombol HXEL
-    end
+-- Ganti CreateParagraph dengan dua CreateLabel untuk koordinat dan money
+local coordLabel = StatsTab:CreateLabel({
+    Name  = "Koordinat: ",
+    Value = "Memuat..."
+})
+local moneyLabel = StatsTab:CreateLabel({
+    Name  = "Money: ",
+    Value = "Memuat..."
 })
 
--- Perbarui koordinat secara real-time
-RunService.RenderStepped:Connect(function()
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        local pos = player.Character.HumanoidRootPart.Position
-        posLabel:Set(string.format("Koordinat: (%.1f, %.1f, %.1f)", pos.X, pos.Y, pos.Z))
+-- Loop untuk mengupdate koordinat dan money setiap detik
+spawn(function()
+    local Players   = game:GetService("Players")
+    local player    = Players.LocalPlayer
+
+    while true do
+        -- Update Koordinat
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local pos = char.HumanoidRootPart.Position
+            -- Bulatkan ke integer agar tampilannya lebih rapi
+            local x, y, z = math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z)
+            coordLabel:Set("Koordinat: " .. x .. ", " .. y .. ", " .. z)
+        else
+            coordLabel:Set("Koordinat: (Tidak tersedia)")
+        end
+
+        -- Update Money (mencari leaderstat bernama "Money")
+        local leaderstats = player:FindFirstChild("leaderstats")
+        if leaderstats then
+            local cashStat = leaderstats:FindFirstChild("Money")
+            if cashStat then
+                moneyLabel:Set("Money: " .. cashStat.Value)
+            else
+                moneyLabel:Set("Money: (Leaderstat 'Money' tidak ditemukan)")
+            end
+        else
+            moneyLabel:Set("Money: (Leaderstats tidak tersedia)")
+        end
+
+        wait(1)
     end
 end)
 
--- Tab: test1 (placeholder)
-local Test1Tab = Window:CreateTab("test1", 4483362458)
-Test1Tab:CreateSection("Placeholder")
-Test1Tab:CreateButton({
-    Name = "Load script test1",
-    Callback = function()
-        loadstring(game:HttpGet("https://example.com/script_test1.lua", true))()
-    end
+-- Membuat tab "test1"
+local Test1Tab = Window:CreateTab("test1", nil)
+Test1Tab:CreateSection("Pengaturan Test 1")
+Test1Tab:CreateParagraph({
+    Title   = "Info Test1", 
+    Content = "Konten test1 di sini."
 })
 
--- Tab: test2 (placeholder)
-local Test2Tab = Window:CreateTab("test2", 4483362458)
-Test2Tab:CreateSection("Placeholder")
-Test2Tab:CreateButton({
-    Name = "Load script test2",
-    Callback = function()
-        loadstring(game:HttpGet("https://example.com/script_test2.lua", true))()
-    end
+-- Membuat tab "test2"
+local Test2Tab = Window:CreateTab("test2", nil)
+Test2Tab:CreateSection("Pengaturan Test 2")
+Test2Tab:CreateParagraph({
+    Title   = "Info Test2", 
+    Content = "Konten test2 di sini."
 })
-
--- Buat tombol HXEL (maximize) sebagai pop-up ketika GUI diminimize
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "HXEL_ButtonGui"
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.Enabled = false
-
-local hxelButton = Instance.new("TextButton")
-hxelButton.Size = UDim2.new(0, 100, 0, 100)
-hxelButton.Position = UDim2.new(0, 10, 0, 10)
-hxelButton.Text = "HXEL"
-hxelButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-hxelButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-hxelButton.TextScaled = true
-hxelButton.Parent = screenGui
-
--- Ubah tombol menjadi bentuk lingkaran
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 50)
-corner.Parent = hxelButton
-
--- Klik untuk menampilkan kembali GUI
-hxelButton.MouseButton1Click:Connect(function()
-    Rayfield:SetVisibility(true)
-    screenGui.Enabled = false
-end)
