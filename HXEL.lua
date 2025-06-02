@@ -430,14 +430,3 @@ do
         end
     end)
 end
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
-            local target = findNearestTarget()
-            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                local targetPos = target.Character.HumanoidRootPart.Position
-                -- Tetap di posisi kamera saat ini, tetapi arahkan ke target
-                local camPos = camera.CFrame.Position
-                camera.CFrame = CFrame.new(camPos, targetPos)
-            end
-        end
-    end)
-end
