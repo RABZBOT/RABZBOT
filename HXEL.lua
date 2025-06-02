@@ -1,5 +1,4 @@
--- Lengkapi dan perbaiki kode Stats di Rayfield agar koordinat langsung ter‐update
--- tanpa jeda 1 detik, serta Money dan Touch Player tetap berfungsi.
+-- Lengkapi dan perbaiki kode Rayfield: Infinite Jump otomatis di tab “test1”
 
 -- Memuat library Rayfield dan membuat jendela utama
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -14,7 +13,6 @@ local StatsTab = Window:CreateTab("Stats", nil)
 StatsTab:CreateSection("Data Statistik")
 
 -- Buat tiga label: Koordinat, Money, dan Touch Player
--- Note: Untuk Rayfield v2, CreateLabel() menerima satu string: "<Nama>: <Value>"
 local coordLabel = StatsTab:CreateLabel("Koordinat: Memuat...")
 local moneyLabel = StatsTab:CreateLabel("Money: Memuat...")
 local touchLabel = StatsTab:CreateLabel("Touch Player: Belum ada")
@@ -25,12 +23,10 @@ do
     local Players    = game:GetService("Players")
     local player     = Players.LocalPlayer
 
-    -- Setiap frame, cek Character dan update label
     RunService.RenderStepped:Connect(function()
         local char = player.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             local pos = char.HumanoidRootPart.Position
-            -- Bulatkan untuk tampilan yang lebih rapi
             local x, y, z = math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z)
             coordLabel:Set(string.format("Koordinat: %d, %d, %d", x, y, z))
         else
@@ -39,31 +35,27 @@ do
     end)
 end
 
--- 2) Pembaruan Money via event Changed (menanggapi perubahan secara instan)
+-- 2) Pembaruan Money via event Changed
 do
     local Players = game:GetService("Players")
     local player  = Players.LocalPlayer
 
     local function bindMoneyStat(stat)
-        -- Jika 'Money' sudah ditemukan, langsung tampilkan dan sambungkan Changed
         moneyLabel:Set("Money: " .. tostring(stat.Value))
         stat.Changed:Connect(function(newVal)
             moneyLabel:Set("Money: " .. tostring(newVal))
         end)
     end
 
-    -- Jika sudah ada leaderstats saat script dijalankan
     if player:FindFirstChild("leaderstats") then
         local ls = player.leaderstats
         if ls:FindFirstChild("Money") then
             bindMoneyStat(ls.Money)
         end
     end
-
-    -- Ketika leaderstats muncul (respawn atau baru spawn)
     player.ChildAdded:Connect(function(child)
         if child.Name == "leaderstats" then
-            wait(0.1)  -- biarkan nilai ter‐initialize
+            wait(0.1)
             local ls = player.leaderstats
             if ls:FindFirstChild("Money") then
                 bindMoneyStat(ls.Money)
@@ -72,7 +64,7 @@ do
     end)
 end
 
--- 3) Deteksi “Touch Player” real‐time pada HumanoidRootPart
+-- 3) Deteksi “Touch Player” pada HumanoidRootPart
 do
     local Players = game:GetService("Players")
     local player  = Players.LocalPlayer
@@ -90,12 +82,9 @@ do
         end)
     end
 
-    -- Bila Character sudah ada sejak awal
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         connectTouch(player.Character.HumanoidRootPart)
     end
-
-    -- Saat respawn, sambungkan kembali
     player.CharacterAdded:Connect(function(char)
         char:WaitForChild("HumanoidRootPart")
         connectTouch(char.HumanoidRootPart)
@@ -104,11 +93,121 @@ end
 
 -- ─── TAB "test1" ───────────────────────────────────────────────────────────
 local Test1Tab = Window:CreateTab("test1", nil)
-Test1Tab:CreateSection("Pengaturan Test 1")
-Test1Tab:CreateParagraph({
-    Title   = "Info Test1",
-    Content = "Konten test1 di sini."
+Test1Tab:CreateSection("Farm & Infinite Jump")
+
+-- Variabel untuk Infinite Jump otomatis
+local farmEnabled     = false
+local customJumpPower = 50
+
+-- Toggle untuk mengaktifkan Infinite Jump otomatis
+local farmToggle = Test1Tab:CreateToggle({
+    Name     = "Enable Infinite Jump",
+    Flag     = "EnableFarm",
+    Value    = false,
+    Callback = function(value)
+        farmEnabled = value
+        local player = game:GetService("Players").LocalPlayer
+        if not farmEnabled and player.Character then
+            -- Kembalikan JumpPower ke default saat dinonaktifkan
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.JumpPower = 50
+            end
+        end
+    end
 })
+
+-- Slider untuk mengatur tinggi lompatan (JumpPower)
+local jumpPowerSlider = Test1Tab:CreateSlider({
+    Name         = "Jump Height",
+    SliderText   = "Power",
+    Range        = {0, 200},
+    Increment    = 1,
+    Suffix       = "",
+    CurrentValue = 50,
+    Flag         = "JumpPower",
+    Callback     = function(value)
+        customJumpPower = value
+        if farmEnabled then
+            local player = game:GetService("Players").LocalPlayer
+            if player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.JumpPower = customJumpPower
+                end
+            end
+        end
+    end
+})
+
+-- Tombol “Reset Jump Power” untuk mengembalikan ke default (50)
+Test1Tab:CreateButton({
+    Name     = "Reset Jump Power",
+    Callback = function()
+        customJumpPower = 50
+        jumpPowerSlider:Update(50)
+        if farmEnabled then
+            local player = game:GetService("Players").LocalPlayer
+            if player.Character then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.JumpPower = customJumpPower
+                end
+            end
+        end
+    end
+})
+
+-- Logika Infinite Jump otomatis (RunService.Heartbeat)
+do
+    local RunService = game:GetService("RunService")
+    local Players    = game:GetService("Players")
+    local player     = Players.LocalPlayer
+
+    RunService.Heartbeat:Connect(function()
+        if not farmEnabled then return end
+
+        if player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                -- Terapkan custom JumpPower
+                humanoid.JumpPower = customJumpPower
+                -- Paksa Humanoid lompat terus‐menerus meski di udara
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end)
+end
+
+-- Contoh logika auto‐farm (opsional): menghancurkan objek “Coin” bila disentuh
+do
+    local Players = game:GetService("Players")
+    local player  = Players.LocalPlayer
+
+    local function onTouched(hit)
+        if not farmEnabled then return end
+        -- Jika bagian yang disentuh bernama “Coin” atau berada dalam Model yang bernama “Coin”
+        if hit.Name == "Coin" or (hit.Parent and hit.Parent.Name == "Coin") then
+            if hit.Parent:IsA("Model") then
+                hit.Parent:Destroy()
+            elseif hit:IsA("BasePart") then
+                hit:Destroy()
+            end
+        end
+    end
+
+    local function connectFarm(rootPart)
+        rootPart.Touched:Connect(onTouched)
+    end
+
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        connectFarm(player.Character.HumanoidRootPart)
+    end
+    player.CharacterAdded:Connect(function(char)
+        char:WaitForChild("HumanoidRootPart")
+        connectFarm(char.HumanoidRootPart)
+    end)
+end
 
 -- ─── TAB "test2" ───────────────────────────────────────────────────────────
 local Test2Tab = Window:CreateTab("test2", nil)
