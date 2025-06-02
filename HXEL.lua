@@ -255,6 +255,19 @@ Test2Tab:CreateButton({
     end
 })
 
+-- Tombol Teleport +1000Z
+Test2Tab:CreateButton({
+    Name = "Teleport +1000Z",
+    Callback = function()
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local root = player.Character.HumanoidRootPart
+            local pos = root.Position
+            root.CFrame = CFrame.new(pos.X, pos.Y, pos.Z + 1000)
+        end
+    end
+})
+
 -- Tambahkan di bawah pembuatan tab “test2” untuk membuat tab “NoClip”
 
 -- ─── TAB "NoClip" ────────────────────────────────────────────────────────────
