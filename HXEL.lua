@@ -254,3 +254,51 @@ Test2Tab:CreateButton({
         end
     end
 })
+
+-- Tambahkan di bawah pembuatan tab “test2” untuk membuat tab “NoClip”
+
+-- ─── TAB "NoClip" ────────────────────────────────────────────────────────────
+local NoClipTab = Window:CreateTab("NoClip", nil)
+NoClipTab:CreateSection("NoClip Controls")
+
+-- State untuk NoClip
+local noclipEnabled = false
+
+-- Toggle untuk mengaktifkan atau menonaktifkan NoClip
+NoClipTab:CreateToggle({
+    Name     = "Enable NoClip",
+    Flag     = "NoClipToggle",
+    Value    = false,
+    Callback = function(value)
+        noclipEnabled = value
+        if not noclipEnabled then
+            -- Saat dinonaktifkan, kembalikan CanCollide ke true untuk semua bagian karakter
+            local player = game:GetService("Players").LocalPlayer
+            if player.Character then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+})
+
+-- Loop NoClip: setiap frame, jika diaktifkan, matikan CanCollide semua bagian karakter
+do
+    local RunService = game:GetService("RunService")
+    local Players    = game:GetService("Players")
+    local player     = Players.LocalPlayer
+
+    RunService.Stepped:Connect(function()
+        if not noclipEnabled then return end
+        if player.Character then
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+end
