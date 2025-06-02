@@ -316,34 +316,45 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Ditingkatkan Lagi untuk FPS Roblox) ────────────────────────
+-- ─── TAB "Auto" (Perbaikan Auto‐Aim ke Kepala) ─────────────────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
-AutoTab:CreateSection("Auto Lock")
+AutoTab:CreateSection("Auto Lock / Aim")
 
--- State untuk Auto Lock
-local lockEnabled     = false
-local lockRadius      = 50
-local targetPartOption = "Head"  -- Default: kunci ke kepala
+-- State untuk Auto Lock / Aim
+local lockEnabled      = false
+local lockRadius       = 50
+local targetPartOption = "Head"  -- Pilihan: "Head" atau "Body"
+local originalCamType  = nil     -- Akan menyimpan CameraType sebelum auto‐aim
 
--- Toggle untuk mengaktifkan atau mematikan Auto Lock
+-- Toggle untuk mengaktifkan atau mematikan Auto Lock/Aim
 AutoTab:CreateToggle({
-    Name     = "Enable Auto Lock",
-    Flag     = "AutoLockToggle",
+    Name     = "Enable Auto Aim",
+    Flag     = "AutoAimToggle",
     Value    = false,
     Callback = function(value)
         lockEnabled = value
+
+        local camera = workspace.CurrentCamera
+        if lockEnabled then
+            -- Simpan CameraType saat ini, lalu set jadi Scriptable
+            originalCamType = camera.CameraType
+            camera.CameraType = Enum.CameraType.Scriptable
+        else
+            -- Kembalikan CameraType ke semula
+            camera.CameraType = originalCamType or Enum.CameraType.Custom
+        end
     end
 })
 
--- Slider untuk mengatur radius Auto Lock (dalam stud)
+-- Slider untuk mengatur radius Auto Aim (dalam stud)
 AutoTab:CreateSlider({
-    Name         = "Lock Radius",
+    Name         = "Aim Radius",
     SliderText   = "Studs",
     Range        = {0, 500},
     Increment    = 5,
     Suffix       = " studs",
     CurrentValue = lockRadius,
-    Flag         = "LockRadius",
+    Flag         = "AimRadius",
     Callback     = function(value)
         lockRadius = value
     end
@@ -361,11 +372,11 @@ AutoTab:CreateDropdown({
     end
 })
 
--- Fungsi bantu: periksa apakah pemain dapat dijadikan target
+-- Fungsi bantu: periksa apakah pemain dapat di‐aim
 -- Kriteria:
--- 1) Bukan teman (friend) dan bukan satu Team (jika game pakai Teams)
--- 2) Tidak memiliki ForceField (menandakan sedang immune)
--- 3) Memiliki Humanoid dan Health > 0 (tidak mati atau spawn-protected)
+-- 1) Bukan teman (friend) atau satu Team
+-- 2) Tidak memiliki ForceField (immune)
+-- 3) Memiliki Humanoid dan Health > 0
 local function canBeTargeted(localPlayer, otherPlayer)
     if not otherPlayer.Character then
         return false
@@ -423,7 +434,7 @@ local function findNearestTarget()
     return nearestPlayer
 end
 
--- Loop RenderStepped untuk mengunci kamera ke target saat Auto Lock aktif
+-- Loop RenderStepped untuk auto‐aim saat aktif
 do
     local RunService = game:GetService("RunService")
     local Players    = game:GetService("Players")
@@ -440,15 +451,17 @@ do
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
                 if targetHum and targetHum.Health > 0 then
+                    -- Tentukan posisi part: Head atau HumanoidRootPart (Body)
                     local targetPos
-                    -- Pilih titik target: Head atau HumanoidRootPart
                     if targetPartOption == "Head" and target.Character:FindFirstChild("Head") then
                         targetPos = target.Character.Head.Position
                     else
                         targetPos = target.Character.HumanoidRootPart.Position
                     end
-                    -- Kunci kamera menghadap targetPos
+
+                    -- Posisi kamera saat ini
                     local camPos = camera.CFrame.Position
+                    -- Arahkan kamera ke targetPos
                     camera.CFrame = CFrame.new(camPos, targetPos)
                 end
             end
