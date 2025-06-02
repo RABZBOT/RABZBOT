@@ -1,6 +1,6 @@
 -- HXEL Script by [Nama Anda]
 -- Versi 2.0 (2025-06-02)
--- Fitur: Unlimited Jump, Speed Hack dengan nilai kustom, Noclip, Anti-AFK (via VirtualUser), Clean Unload
+-- Fitur: Unlimited Jump (modular), Speed Hack dengan nilai kustom, Noclip, Anti-AFK, Clean Unload
 
 --==========================================================--
 --=== 1. DEFINISI KONFIGURASI & VARIABEL POKOK ================--
@@ -13,7 +13,7 @@ local RunService    = game:GetService("RunService")
 local CoreGui       = game:GetService("CoreGui")
 local VirtualUser   = game:GetService("VirtualUser")
 
--- Player & Character (akan di-set pada CharacterAdded)
+-- Player & Character (akan di‐set pada CharacterAdded)
 local player        = Players.LocalPlayer
 local character     = player.Character or player.CharacterAdded:Wait()
 local humanoid      = character:WaitForChild("Humanoid")
@@ -37,13 +37,13 @@ local isSpeedHackEnabled     = false
 local isNoclipEnabled        = false
 local isAntiAFKEnabled       = false
 
--- Simpan koneksi agar bisa di-disconnect ketika dimatikan
-local jumpConnection     = nil
+-- Simpan koneksi agar bisa di‐disconnect ketika dimatikan
+local speedOriginal      = nil
 local noclipConnection   = nil
 local afkConnection      = nil
 
--- Simpan nilai original (untuk reset)
-local originalWalkSpeed = humanoid.WalkSpeed
+-- Module Unlimited Jump (akan di‐load via loadstring)
+local unljmpModule = nil
 
 --==========================================================--
 --=== 2. FUNGSI-PUNGSI PENDUKUNG (UTILITIES) ================--
@@ -86,18 +86,18 @@ local function createButton(parentFrame, name, anchorY, text, callback)
     return btn
 end
 
--- Fungsi untuk mengupdate posisi Humanoid & references ketika respawn
+-- Fungsi untuk mengupdate posisi Humanoid & references ketika respawn (umum untuk Speed & Noclip)
 local function onCharacterAdded(char)
     character = char
     humanoid  = character:WaitForChild("Humanoid")
-    originalWalkSpeed = humanoid.WalkSpeed
-
-    -- Jika Speed Hack sedang aktif, pulihkan speed ke nilai custom
-    if isSpeedHackEnabled then
-        humanoid.WalkSpeed = (tonumber(txtSpeedInput.Text) or DEFAULT_SPEED)
+    -- Jika Speed Hack sedang aktif, pulihkan speed ke nilai kustom
+    if isSpeedHackEnabled and tonumber(txtSpeedInput.Text) then
+        humanoid.WalkSpeed = tonumber(txtSpeedInput.Text)
+    elseif not isSpeedHackEnabled then
+        humanoid.WalkSpeed = speedOriginal or humanoid.WalkSpeed
     end
 
-    -- Jika Noclip sedang aktif, langsung set CanCollide=false untuk semua part baru
+    -- Jika Noclip sedang aktif, langsung set CanCollide = false untuk semua part baru
     if isNoclipEnabled then
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -107,34 +107,44 @@ local function onCharacterAdded(char)
     end
 end
 
--- Tambahkan listener agar saat respawn, references ter-update
+-- Tambahkan listener agar saat respawn, references ter‐update
 player.CharacterAdded:Connect(onCharacterAdded)
 
 --==========================================================--
 --=== 3. IMPLENTASI FUNGSI-FUNGSI UTAMA =======================--
 --==========================================================--
 
------ 3.1 Unlimited Jump -----
+----- 3.1 Unlimited Jump (Modular via loadstring) -----
 local function toggleUnlimitedJump()
     isUnlimitedJumpEnabled = not isUnlimitedJumpEnabled
-    lblJumpStatus.Text = "Unlimited Jump: " .. (isUnlimitedJumpEnabled and "ON" or "OFF")
-    lblJumpStatus.TextColor3 = isUnlimitedJumpEnabled and COLOR_TEXT_ON or COLOR_TEXT_OFF
-
     if isUnlimitedJumpEnabled then
-        -- Jika belum ada koneksi, buat koneksi sekali saja
-        if not jumpConnection then
-            jumpConnection = UserInput.JumpRequest:Connect(function()
-                if humanoid and humanoid.Parent then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
+        -- Jika belum ada module, load via loadstring
+        if not unljmpModule then
+            local success, result = pcall(function()
+                return loadstring(game:HttpGet(
+                    "https://raw.githubusercontent.com/RABZBOT/RABZBOT/main/fit/unljmp.lua",
+                    true
+                ))()
             end)
+            if success and type(result) == "table" then
+                unljmpModule = result
+            else
+                warn("Gagal load modul Unlimited Jump:", result)
+                isUnlimitedJumpEnabled = false
+                return
+            end
         end
+        -- Panggil Enable pada modul
+        unljmpModule.Enable()
+        lblJumpStatus.Text = "Unlimited Jump: ON"
+        lblJumpStatus.TextColor3 = COLOR_TEXT_ON
     else
-        -- Disconnect koneksi dan bersihkan variabel
-        if jumpConnection then
-            jumpConnection:Disconnect()
-            jumpConnection = nil
+        -- Disable & clear module jika perlu
+        if unljmpModule then
+            unljmpModule.Disable()
         end
+        lblJumpStatus.Text = "Unlimited Jump: OFF"
+        lblJumpStatus.TextColor3 = COLOR_TEXT_OFF
     end
 end
 
@@ -143,6 +153,8 @@ end
 local function toggleSpeedHack()
     isSpeedHackEnabled = not isSpeedHackEnabled
     if isSpeedHackEnabled then
+        -- Simpan original speed untuk restore nanti
+        speedOriginal = humanoid.WalkSpeed
         -- Ambil nilai dari txtSpeedInput, jika tidak valid gunakan DEFAULT_SPEED
         local inputSpeed = tonumber(txtSpeedInput.Text)
         local newSpeed = (inputSpeed and inputSpeed > 0) and inputSpeed or DEFAULT_SPEED
@@ -150,7 +162,7 @@ local function toggleSpeedHack()
         lblSpeedStatus.Text = "Speed Hack: ON (" .. tostring(newSpeed) .. ")"
         lblSpeedStatus.TextColor3 = COLOR_TEXT_ON
     else
-        humanoid.WalkSpeed = originalWalkSpeed
+        humanoid.WalkSpeed = speedOriginal or humanoid.WalkSpeed
         lblSpeedStatus.Text = "Speed Hack: OFF"
         lblSpeedStatus.TextColor3 = COLOR_TEXT_OFF
     end
@@ -158,7 +170,6 @@ end
 
 ----- 3.3 Noclip -----
 local function updateNoclipParts()
-    -- Set CanCollide = false untuk semua BasePart di karakter
     if character then
         for _, part in ipairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -174,15 +185,12 @@ local function toggleNoclip()
     lblNoclipStatus.TextColor3 = isNoclipEnabled and COLOR_TEXT_ON or COLOR_TEXT_OFF
 
     if isNoclipEnabled then
-        -- Pertama-tama set untuk semua part yang ada sekarang
+        -- Pertama‐tama set untuk semua part yang ada sekarang
         updateNoclipParts()
-
-        -- Sambung ke Stepped agar setiap frame part baru juga di-disable collidenya
-        noclipConnection = RunService.Stepped:Connect(function()
-            updateNoclipParts()
-        end)
+        -- Sambung ke Stepped agar setiap frame part baru juga di‐disable collidenya
+        noclipConnection = RunService.Stepped:Connect(updateNoclipParts)
     else
-        -- Kembalikan CanCollide = true untuk part (opsional, tergantung preferensi)
+        -- Kembalikan CanCollide = true untuk part (opsional)
         if character then
             for _, part in ipairs(character:GetDescendants()) do
                 if part:IsA("BasePart") then
@@ -190,7 +198,6 @@ local function toggleNoclip()
                 end
             end
         end
-
         -- Disconnect loop
         if noclipConnection then
             noclipConnection:Disconnect()
@@ -206,20 +213,16 @@ local function toggleAntiAFK()
     lblAntiAFKStatus.TextColor3 = isAntiAFKEnabled and COLOR_TEXT_ON or COLOR_TEXT_OFF
 
     if isAntiAFKEnabled then
-        -- Set VirtualUser agar kadang mengirimkan input palsu
-        -- Simpan koneksi pada RunService.Heartbeat untuk interval
         local timeAccumulator = 0
         afkConnection = RunService.Heartbeat:Connect(function(dt)
             timeAccumulator = timeAccumulator + dt
             if timeAccumulator >= AFK_INTERVAL then
-                -- Kirim gerakan mouse palsu agar tidak AFK
                 VirtualUser:CaptureController()
                 VirtualUser:ClickButton2(Vector2.new(0, 0))
                 timeAccumulator = 0
             end
         end)
     else
-        -- Disconnect dan reset interval
         if afkConnection then
             afkConnection:Disconnect()
             afkConnection = nil
@@ -230,10 +233,18 @@ end
 ----- 3.5 Clean Unload (Destroy GUI + Disconnect Semuanya) -----
 local function unloadScript()
     -- Matikan semua fitur jika sedang aktif
-    if isUnlimitedJumpEnabled then toggleUnlimitedJump() end
+    if isUnlimitedJumpEnabled and unljmpModule then
+        unljmpModule.Disable()
+    end
     if isSpeedHackEnabled then toggleSpeedHack() end
     if isNoclipEnabled then toggleNoclip() end
     if isAntiAFKEnabled then toggleAntiAFK() end
+
+    -- Jika modul Unlimited Jump sudah di‐load, panggil Destroy
+    if unljmpModule then
+        unljmpModule.Destroy()
+        unljmpModule = nil
+    end
 
     -- Hancurkan GUI
     if CoreGui:FindFirstChild("HXEL_Main") then
@@ -264,11 +275,11 @@ MainFrame.Size            = UDim2.new(0, 320, 0, 300)
 MainFrame.Position        = UDim2.new(0.5, -160, 0.5, -150)
 MainFrame.BackgroundColor3= COLOR_BG
 MainFrame.BorderSizePixel = 0
-MainFrame.Active          = true      -- Agar bisa dijadikan basis Draggable
+MainFrame.Active          = true
 MainFrame.Selectable      = true
 MainFrame.Parent          = HXEL
 
--- Title Bar (untuk judul + tombol close)
+-- Title Bar (Judul + Tombol Close)
 local TitleBar = Instance.new("Frame")
 TitleBar.Name             = "TitleBar"
 TitleBar.Size             = UDim2.new(1, 0, 0, 40)
@@ -300,7 +311,7 @@ btnClose.TextScaled       = true
 btnClose.Parent           = TitleBar
 btnClose.MouseButton1Click:Connect(unloadScript)
 
--- Draggable Behavior (cara ringkas jika Draggable di-disable di versi Roblox terbaru, kita pakai manual)
+-- Draggable Behavior
 do
     local dragging       = false
     local dragStart      = nil
@@ -334,7 +345,7 @@ do
     end)
 end
 
--- Container untuk tombol-tombol dan status
+-- Container untuk tombol‐tombol dan status
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Name            = "ContentFrame"
 ContentFrame.Size            = UDim2.new(1, 0, 1, -40)
@@ -342,14 +353,14 @@ ContentFrame.Position        = UDim2.new(0, 0, 0, 40)
 ContentFrame.BackgroundTransparency = 1
 ContentFrame.Parent          = MainFrame
 
--- Atur layout vertikal otomatis
+-- Layout vertical
 local uiLayout = Instance.new("UIListLayout")
-uiLayout.Parent      = ContentFrame
+uiLayout.Parent       = ContentFrame
 uiLayout.FillDirection= Enum.FillDirection.Vertical
-uiLayout.SortOrder   = Enum.SortOrder.LayoutOrder
-uiLayout.Padding     = UDim.new(0, 8)
+uiLayout.SortOrder    = Enum.SortOrder.LayoutOrder
+uiLayout.Padding      = UDim.new(0, 8)
 
--- Spacer (agar tombol tidak terlalu rapat ke atas)
+-- Spacer (wrapper atas)
 local Spacer = Instance.new("Frame")
 Spacer.Size             = UDim2.new(1, 0, 0, 10)
 Spacer.BackgroundTransparency = 1
@@ -366,8 +377,7 @@ rowJump.Parent           = ContentFrame
 local btnJump = createButton(rowJump, "BtnUnlimitedJump", 0, "Toggle Unlimited Jump", function() toggleUnlimitedJump() end)
 btnJump.Size              = UDim2.new(0.6, 0, 1, 0)
 btnJump.Position          = UDim2.new(0, 10, 0, 0)
-
-lblJumpStatus = createStatusLabel(rowJump, UDim2.new(0.7, 0, 0, 10))
+lblJumpStatus             = createStatusLabel(rowJump, UDim2.new(0.7, 0, 0, 10))
 
 -- Baris 2: Speed Hack + Input Speed Kustom
 local rowSpeed = Instance.new("Frame")
@@ -428,6 +438,5 @@ SpacerBottom.LayoutOrder = 6
 SpacerBottom.Parent     = ContentFrame
 
 --==========================================================--
---=== 5. PESAN LOG --------------------------------------------------------------------------------------------------------------------------
+--=== 5. PESAN LOG =============-----------------------------­
 print("HXEL v2.0 Script Loaded Successfully!")
-                                
