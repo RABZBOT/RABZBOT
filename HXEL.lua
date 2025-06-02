@@ -316,7 +316,7 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Ditingkatkan) ───────────────────────────────────────────────
+-- ─── TAB "Auto" (Ditingkatkan Lagi) ────────────────────────────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock")
 
@@ -350,26 +350,36 @@ AutoTab:CreateSlider({
 
 -- Fungsi bantu untuk memeriksa apakah target bisa di-lock:
 -- 1) Bukan teman (friend)
--- 2) Tidak memiliki ForceField (indikasi immune terhadap damage)
+-- 2) Tidak memiliki ForceField (immune)
+-- 3) Memiliki Humanoid dan Health > 0 (tidak mati atau nol darah)
 local function canBeTargeted(localPlayer, otherPlayer)
+    -- Pastikan karakter ada
+    local otherChar = otherPlayer.Character
+    if not otherChar then return false end
+
     -- 1) Cek friend
     if localPlayer:IsFriendsWith(otherPlayer.UserId) then
         return false
     end
 
-    -- 2) Cek jika karakter punya ForceField (tidak bisa di-damage)
-    local otherChar = otherPlayer.Character
-    if otherChar and otherChar:FindFirstChild("ForceField") then
+    -- 2) Cek ForceField
+    if otherChar:FindFirstChild("ForceField") then
+        return false
+    end
+
+    -- 3) Cek Humanoid dan Health
+    local humanoid = otherChar:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then
         return false
     end
 
     return true
 end
 
--- Fungsi untuk menemukan pemain terdekat (selain diri sendiri) dalam radius, 
--- dengan pengecekan di canBeTargeted()
+-- Fungsi untuk menemukan pemain terdekat (selain diri sendiri) dalam radius,
+-- dengan pengecekan canBeTargeted()
 local function findNearestTarget()
-    local Players    = game:GetService("Players")
+    local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
     if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
         return nil
@@ -410,25 +420,16 @@ do
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
             local target = findNearestTarget()
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                local targetPos = target.Character.HumanoidRootPart.Position
-                local camPos    = camera.CFrame.Position
-                camera.CFrame   = CFrame.new(camPos, targetPos)
+                local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
+                if targetHum and targetHum.Health > 0 then
+                    local targetPos = target.Character.HumanoidRootPart.Position
+                    local camPos    = camera.CFrame.Position
+                    camera.CFrame   = CFrame.new(camPos, targetPos)
+                end
             end
         end
     end)
 end
-do
-    local RunService = game:GetService("RunService")
-    local camera     = workspace.CurrentCamera
-    local Players    = game:GetService("Players")
-    local player     = Players.LocalPlayer
-
-    RunService.RenderStepped:Connect(function()
-        if not lockEnabled then
-            return
-        end
-
-        -- Pastikan karakter local player ada dan kamera valid
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
             local target = findNearestTarget()
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
