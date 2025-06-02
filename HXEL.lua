@@ -316,7 +316,7 @@ do
     end)
 end
 
--- ─── TAB "Auto" ─────────────────────────────────────────────────────────────
+-- ─── TAB "Auto" (Ditingkatkan) ───────────────────────────────────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock")
 
@@ -348,24 +348,75 @@ AutoTab:CreateSlider({
     end
 })
 
--- Fungsi bantu untuk menemukan pemain terdekat (selain diri sendiri) dalam radius
+-- Fungsi bantu untuk memeriksa apakah target bisa di-lock:
+-- 1) Bukan teman (friend)
+-- 2) Tidak memiliki ForceField (indikasi immune terhadap damage)
+local function canBeTargeted(localPlayer, otherPlayer)
+    -- 1) Cek friend
+    if localPlayer:IsFriendsWith(otherPlayer.UserId) then
+        return false
+    end
+
+    -- 2) Cek jika karakter punya ForceField (tidak bisa di-damage)
+    local otherChar = otherPlayer.Character
+    if otherChar and otherChar:FindFirstChild("ForceField") then
+        return false
+    end
+
+    return true
+end
+
+-- Fungsi untuk menemukan pemain terdekat (selain diri sendiri) dalam radius, 
+-- dengan pengecekan di canBeTargeted()
 local function findNearestTarget()
-    local Players = game:GetService("Players")
-    local player  = Players.LocalPlayer
-    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+    local Players    = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
         return nil
     end
 
-    local rootPos = player.Character.HumanoidRootPart.Position
+    local rootPos = localPlayer.Character.HumanoidRootPart.Position
     local nearestDist = lockRadius
     local nearestPlayer = nil
 
     for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
-            local otherPos = other.Character.HumanoidRootPart.Position
-            local dist = (rootPos - otherPos).Magnitude
-            if dist <= nearestDist then
-                nearestDist = dist
+        if other ~= localPlayer and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+            if canBeTargeted(localPlayer, other) then
+                local otherPos = other.Character.HumanoidRootPart.Position
+                local dist = (rootPos - otherPos).Magnitude
+                if dist <= nearestDist then
+                    nearestDist = dist
+                    nearestPlayer = other
+                end
+            end
+        end
+    end
+
+    return nearestPlayer
+end
+
+-- Loop RenderStepped untuk mengunci kamera ke target saat Auto Lock aktif
+do
+    local RunService = game:GetService("RunService")
+    local Players    = game:GetService("Players")
+    local player     = Players.LocalPlayer
+    local camera     = workspace.CurrentCamera
+
+    RunService.RenderStepped:Connect(function()
+        if not lockEnabled then
+            return
+        end
+
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
+            local target = findNearestTarget()
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                local targetPos = target.Character.HumanoidRootPart.Position
+                local camPos    = camera.CFrame.Position
+                camera.CFrame   = CFrame.new(camPos, targetPos)
+            end
+        end
+    end)
+end
                 nearestPlayer = other
             end
         end
