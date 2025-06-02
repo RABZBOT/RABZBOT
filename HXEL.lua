@@ -417,15 +417,6 @@ do
         end
     end)
 end
-                nearestPlayer = other
-            end
-        end
-    end
-
-    return nearestPlayer
-end
-
--- Loop RenderStepped untuk mengunci kamera ke target saat Auto Lock aktif
 do
     local RunService = game:GetService("RunService")
     local camera     = workspace.CurrentCamera
