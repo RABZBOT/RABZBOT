@@ -1,6 +1,9 @@
 -- HXEL Script by [Nama Anda]
--- Versi 2.1 (2025-06-02)
--- Fitur: Unlimited Jump (Auto-Jump) dgn kecepatan kustom, GUI dengan minimize/maximize, rounded corners, border stroke, animasi Tween.
+-- Versi 2.2 (2025-06-02)
+-- Fitur:
+--   • GUI Modern dengan Tabs (Status, Teleport, Unlimited Jump)
+--   • Integrasi Modular “Unlimited Jump” (via loadstring)
+--   • Animasi Tween, Rounded Corners, Border Stroke, Drag TitleBar
 
 --==========================================================--
 --=== 1. DEFINISI KONFIGURASI & VARIABEL POKOK ================--
@@ -9,99 +12,89 @@
 local Players      = game:GetService("Players")
 local CoreGui      = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
+local RunService   = game:GetService("RunService")
 
 local player       = Players.LocalPlayer
-local character    = player.Character or player.CharacterAdded:Wait()
-local humanoid     = character:WaitForChild("Humanoid")
 
 -- Color / Styling
-local COLOR_BG        = Color3.fromRGB(25, 25, 35)
-local COLOR_FRAME     = Color3.fromRGB(40, 40, 50)
-local COLOR_TITLE     = Color3.fromRGB(0, 200, 180)
-local COLOR_BUTTON    = Color3.fromRGB(60, 60, 80)
-local COLOR_BUTTON_H  = Color3.fromRGB(80, 80, 100)
-local COLOR_TEXT_ON   = Color3.fromRGB(0, 255, 0)
-local COLOR_TEXT_OFF  = Color3.fromRGB(200, 200, 200)
-local BORDER_COLOR    = Color3.fromRGB(60, 60, 80)
+local COLOR_BG            = Color3.fromRGB(25, 25, 35)
+local COLOR_FRAME         = Color3.fromRGB(40, 40, 50)
+local COLOR_TITLE         = Color3.fromRGB(0, 200, 180)
+local COLOR_TAB_INACTIVE  = Color3.fromRGB(50, 50, 60)
+local COLOR_TAB_ACTIVE    = Color3.fromRGB(70, 70, 90)
+local COLOR_BUTTON        = Color3.fromRGB(60, 60, 80)
+local COLOR_BUTTON_H      = Color3.fromRGB(80, 80, 100)
+local COLOR_TEXT_HEADER   = Color3.fromRGB(200, 200, 200)
+local COLOR_TEXT_ON       = Color3.fromRGB(0, 255, 0)
+local COLOR_TEXT_OFF      = Color3.fromRGB(200, 200, 200)
+local COLOR_BORDER        = Color3.fromRGB(60, 60, 80)
 
-local FONT_LABEL      = Enum.Font.GothamBold
-local FONT_BUTTON     = Enum.Font.Gotham
+local FONT_HEADER       = Enum.Font.GothamBold
+local FONT_NORMAL       = Enum.Font.Gotham
 
--- Status Flag
-local isUnlimitedJumpEnabled = false
+-- Status Flags & Module References
 local isMinimized            = false
+local isUnlimitedJumpEnabled = false
+local unljmpModule           = nil
 
--- Module Unlimited Jump (dimuat via loadstring)
-local unljmpModule = nil
+-- GUI References (akan diinisialisasi di bagian GUI)
+local MainFrame, TitleBar, TabBar, ContentArea
+local btnClose, btnMinimize
+local btnTabStatus, btnTabTeleport, btnTabJump
+local StatusFrame, TeleportFrame, JumpFrame
 
--- GUI References (akan diinisialisasi di bagian 4)
-local MainGui, MainFrame, TitleBar
-local btnClose, btnMinimize, lblTitle
-local ContentFrame
-local lblSpeedText, txtJumpSpeed
-local lblJumpStatus, btnJump
+-- Kontrol untuk update Status Tab
+local statusAccumulator = 0
 
--- Animasi tween untuk minimize/maximize
+-- Jump UI dalam JumpFrame
+local txtJumpSpeed, lblJumpStatus, btnJumpToggle
+
+-- Teleport UI dalam TeleportFrame
+local txtTeleportX, txtTeleportY, txtTeleportZ, btnTeleport
+
+-- Ukuran GUI (normalsize vs minimized)
+local ORIGINAL_SIZE   = UDim2.new(0, 360, 0, 240)
+local MINIMIZED_SIZE  = UDim2.new(0, 360, 0, 30)
+
+-- Tween Info
 local tweenInfoShort = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
--- Ukuran‐ukuran awal (sebagai referensi saat restore)
-local ORIGINAL_SIZE = UDim2.new(0, 300, 0, 180)
-local MINIMIZED_SIZE = UDim2.new(0, 300, 0, 30)
-
 --==========================================================--
---=== 2. FUNGSI PENDUKUNG ====================================--
+--=== 2. FUNGSI PENDUKUNG (UTILITIES) ========================--
 --==========================================================--
 
--- Helper: Membuat rounded corner pada sebuah instance
-local function applyRoundedCorners(inst, radius)
+-- Buat UICorner (rounded corner)
+local function applyRounded(inst, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius or 8)
     corner.Parent = inst
 end
 
--- Helper: Membuat border stroke pada sebuah instance
-local function applyBorderStroke(inst, thickness, color)
+-- Buat UIStroke (border stroke)
+local function applyStroke(inst, thickness, color)
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = thickness or 1
-    stroke.Color = color or BORDER_COLOR
+    stroke.Color = color or COLOR_BORDER
     stroke.Parent = inst
 end
 
--- Fungsi untuk membuat StatusLabel (ON/OFF)
-local function createStatusLabel(parentFrame, anchorPos)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size             = UDim2.new(0.4, 0, 0, 20)
-    lbl.Position         = anchorPos
-    lbl.BackgroundColor3 = COLOR_FRAME
-    lbl.BorderSizePixel  = 0
-    lbl.Text             = "OFF"
-    lbl.TextScaled       = true
-    lbl.TextColor3       = COLOR_TEXT_OFF
-    lbl.Font             = FONT_LABEL
-    lbl.Parent           = parentFrame
-    applyRoundedCorners(lbl, 4)
-    applyBorderStroke(lbl, 1, BORDER_COLOR)
-    return lbl
-end
-
--- Fungsi untuk membuat Button dengan hover effect
-local function createButton(parentFrame, name, anchorY, text, callback)
+-- Buat Button modern dengan hover effect
+local function createButton(parent, name, size, pos, text, callback)
     local btn = Instance.new("TextButton")
-    btn.Name             = name
-    btn.Size             = UDim2.new(0.8, 0, 0, 32)
-    btn.Position         = UDim2.new(0.1, 0, anchorY, 0)
-    btn.BackgroundColor3 = COLOR_BUTTON
-    btn.Text             = text
-    btn.TextColor3       = COLOR_TEXT_OFF
-    btn.Font             = FONT_BUTTON
-    btn.TextScaled       = true
-    btn.BorderSizePixel  = 0
-    btn.Parent           = parentFrame
+    btn.Name               = name
+    btn.Size               = size
+    btn.Position           = pos
+    btn.BackgroundColor3   = COLOR_BUTTON
+    btn.Text               = text
+    btn.TextColor3         = COLOR_TEXT_HEADER
+    btn.Font               = FONT_NORMAL
+    btn.TextScaled         = true
+    btn.BorderSizePixel    = 0
+    btn.Parent             = parent
 
-    applyRoundedCorners(btn, 4)
-    applyBorderStroke(btn, 1, BORDER_COLOR)
+    applyRounded(btn, 4)
+    applyStroke(btn, 1, COLOR_BORDER)
 
-    -- Hover effect: ganti warna saat kursor di atas
     btn.MouseEnter:Connect(function()
         btn.BackgroundColor3 = COLOR_BUTTON_H
     end)
@@ -116,33 +109,54 @@ local function createButton(parentFrame, name, anchorY, text, callback)
     return btn
 end
 
--- Tween helper: resize MainFrame ke ukuran target
+-- Tween resize MainFrame
 local function tweenMainFrameSize(targetSize)
-    if MainFrame then
-        TweenService:Create(MainFrame, tweenInfoShort, {Size = targetSize}):Play()
+    TweenService:Create(MainFrame, tweenInfoShort, {Size = targetSize}):Play()
+end
+
+-- Ganti Tab: set warna aktif/inaktif, hide/show frame
+local function switchTab(activeTab)
+    -- Reset semua tab ke inactive
+    btnTabStatus.BackgroundColor3   = COLOR_TAB_INACTIVE
+    btnTabTeleport.BackgroundColor3 = COLOR_TAB_INACTIVE
+    btnTabJump.BackgroundColor3     = COLOR_TAB_INACTIVE
+
+    -- Hide semua frame
+    StatusFrame.Visible   = false
+    TeleportFrame.Visible = false
+    JumpFrame.Visible     = false
+
+    -- Aktifkan tab & frame yang dipilih
+    if activeTab == "Status" then
+        btnTabStatus.BackgroundColor3 = COLOR_TAB_ACTIVE
+        StatusFrame.Visible = true
+    elseif activeTab == "Teleport" then
+        btnTabTeleport.BackgroundColor3 = COLOR_TAB_ACTIVE
+        TeleportFrame.Visible = true
+    elseif activeTab == "Jump" then
+        btnTabJump.BackgroundColor3 = COLOR_TAB_ACTIVE
+        JumpFrame.Visible = true
     end
 end
 
 --==========================================================--
---=== 3. IMPLEMENTASI FUNGSI UTAMA ==========================--
+--=== 3. FUNGSI UTAMA =======================================--
 --==========================================================--
 
--- Toggle Minimize / Maximize
+-- Toggle minimize / maximize
 local function toggleMinimize()
     if isMinimized then
         -- Maximize kembali
         tweenMainFrameSize(ORIGINAL_SIZE)
-        -- Tampilkan konten (fade in sederhana)
-        ContentFrame.Visible = true
+        ContentArea.Visible = true
         isMinimized = false
         btnMinimize.Text = "–"
     else
-        -- Minimize (hanya TitleBar)
+        -- Minimize
         tweenMainFrameSize(MINIMIZED_SIZE)
-        -- Setelah animasi selesai, sembunyikan konten agar tidak interaksi
         delay(0.2, function()
             if MainFrame.Size == MINIMIZED_SIZE then
-                ContentFrame.Visible = false
+                ContentArea.Visible = false
             end
         end)
         isMinimized = true
@@ -150,24 +164,41 @@ local function toggleMinimize()
     end
 end
 
--- Toggle Unlimited Jump (sama seperti sebelumnya, tapi update status label)
+-- Unload script dan cleanup
+local function unloadScript()
+    -- Disable Unlimited Jump jika aktif
+    if isUnlimitedJumpEnabled and unljmpModule then
+        unljmpModule.Disable()
+    end
+    -- Destroy modul jika sudah load
+    if unljmpModule then
+        unljmpModule.Destroy()
+        unljmpModule = nil
+    end
+    -- Hapus GUI
+    if CoreGui:FindFirstChild("HXEL_Main") then
+        CoreGui.HXEL_Main:Destroy()
+    end
+    warn("HXEL Script Unloaded.")
+end
+
+-- Toggle Unlimited Jump (Jump Tab)
 local function toggleUnlimitedJump()
     isUnlimitedJumpEnabled = not isUnlimitedJumpEnabled
 
     if isUnlimitedJumpEnabled then
-        -- Lazy‐load modul sekali saja
+        -- Lazy‐load modul (hanya sekali)
         if not unljmpModule then
-            local success, result = pcall(function()
+            local ok, mod = pcall(function()
                 return loadstring(game:HttpGet(
                     "https://raw.githubusercontent.com/RABZBOT/RABZBOT/main/fit/unljmp.lua",
                     true
                 ))()
             end)
-
-            if success and type(result) == "table" then
-                unljmpModule = result
+            if ok and type(mod) == "table" then
+                unljmpModule = mod
             else
-                warn("Gagal load modul Unlimited Jump:", result)
+                warn("Gagal load modul Unlimited Jump:", mod)
                 isUnlimitedJumpEnabled = false
                 lblJumpStatus.Text = "OFF"
                 lblJumpStatus.TextColor3 = COLOR_TEXT_OFF
@@ -175,10 +206,10 @@ local function toggleUnlimitedJump()
             end
         end
 
-        -- Set speed dari TextBox jika valid
-        local inputSpeed = tonumber(txtJumpSpeed.Text)
-        if inputSpeed and inputSpeed > 0 then
-            unljmpModule.SetSpeed(inputSpeed)
+        -- Ambil speed dari TextBox jika valid
+        local speedVal = tonumber(txtJumpSpeed.Text)
+        if speedVal and speedVal > 0 then
+            unljmpModule.SetSpeed(speedVal)
         end
 
         unljmpModule.Enable()
@@ -193,25 +224,53 @@ local function toggleUnlimitedJump()
     end
 end
 
--- Unload Script (Close)
-local function unloadScript()
-    -- Matikan Unlimited Jump jika aktif
-    if isUnlimitedJumpEnabled and unljmpModule then
-        unljmpModule.Disable()
+-- Teleport player ke koordinat input (Teleport Tab)
+local function teleportPlayer()
+    local x = tonumber(txtTeleportX.Text)
+    local y = tonumber(txtTeleportY.Text)
+    local z = tonumber(txtTeleportZ.Text)
+    if x and y and z then
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = CFrame.new(Vector3.new(x, y, z))
+        end
+    else
+        warn("Teleport: Pastikan X, Y, Z adalah angka valid.")
+    end
+end
+
+-- Update status (koordinat & money) setiap 0.5 detik (Status Tab)
+local function updateStatus(dt)
+    statusAccumulator = statusAccumulator + dt
+    if statusAccumulator < 0.5 then return end
+    statusAccumulator = statusAccumulator - 0.5
+
+    -- Update koordinat
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local pos = char.HumanoidRootPart.Position
+        StatusFrame.CoordinatesLabel.Text = string.format("Coords: (%.1f, %.1f, %.1f)", pos.X, pos.Y, pos.Z)
+    else
+        StatusFrame.CoordinatesLabel.Text = "Coords: (n/a)"
     end
 
-    -- Panggil Destroy pada modul jika sudah load
-    if unljmpModule then
-        unljmpModule.Destroy()
-        unljmpModule = nil
+    -- Update money (jika ada leaderstats)
+    local ls = player:FindFirstChild("leaderstats")
+    if ls then
+        local found = false
+        for _, stat in ipairs(ls:GetChildren()) do
+            if stat:IsA("NumberValue") or stat:IsA("IntValue") then
+                StatusFrame.MoneyLabel.Text = stat.Name .. ": " .. tostring(stat.Value)
+                found = true
+                break
+            end
+        end
+        if not found then
+            StatusFrame.MoneyLabel.Text = "Money: (n/a)"
+        end
+    else
+        StatusFrame.MoneyLabel.Text = "Money: (n/a)"
     end
-
-    -- Hapus GUI
-    if CoreGui:FindFirstChild("HXEL_Main") then
-        CoreGui.HXEL_Main:Destroy()
-    end
-
-    warn("HXEL Script Unloaded.")
 end
 
 --==========================================================--
@@ -224,25 +283,25 @@ if CoreGui:FindFirstChild("HXEL_Main") then
 end
 
 -- Buat ScreenGui
-MainGui = Instance.new("ScreenGui")
+local MainGui = Instance.new("ScreenGui")
 MainGui.Name   = "HXEL_Main"
 MainGui.Parent = CoreGui
 
--- Buat MainFrame (rounded, border stroke)
+-- Buat MainFrame (rounded & border)
 MainFrame = Instance.new("Frame")
 MainFrame.Name             = "MainFrame"
 MainFrame.Size             = ORIGINAL_SIZE
-MainFrame.Position         = UDim2.new(0.5, -150, 0.5, -90)
+MainFrame.Position         = UDim2.new(0.5, -180, 0.5, -120)
 MainFrame.BackgroundColor3 = COLOR_BG
 MainFrame.BorderSizePixel  = 0
 MainFrame.Active           = true
 MainFrame.Selectable       = true
 MainFrame.Parent           = MainGui
 
-applyRoundedCorners(MainFrame, 12)
-applyBorderStroke(MainFrame, 2, BORDER_COLOR)
+applyRounded(MainFrame, 12)
+applyStroke(MainFrame, 2, COLOR_BORDER)
 
--- Title Bar (rounded atas, warna kontras, border stroke)
+-- Title Bar (rounded atas)
 TitleBar = Instance.new("Frame")
 TitleBar.Name             = "TitleBar"
 TitleBar.Size             = UDim2.new(1, 0, 0, 30)
@@ -250,17 +309,17 @@ TitleBar.BackgroundColor3 = COLOR_TITLE
 TitleBar.BorderSizePixel  = 0
 TitleBar.Parent           = MainFrame
 
-applyRoundedCorners(TitleBar, 12)
-applyBorderStroke(TitleBar, 1, BORDER_COLOR)
+applyRounded(TitleBar, 12)
+applyStroke(TitleBar, 1, COLOR_BORDER)
 
--- Judul (dalam TitleBar)
-lblTitle = Instance.new("TextLabel")
-lblTitle.Size               = UDim2.new(1, -70, 1, 0)
+-- Judul (di dalam TitleBar)
+local lblTitle = Instance.new("TextLabel")
+lblTitle.Size               = UDim2.new(1, -90, 1, 0)
 lblTitle.Position           = UDim2.new(0, 10, 0, 0)
 lblTitle.BackgroundTransparency = 1
-lblTitle.Text               = "HXEL - Unlimited Jump"
+lblTitle.Text               = "HXEL - Multi Tab UI"
 lblTitle.TextColor3         = Color3.fromRGB(255, 255, 255)
-lblTitle.Font               = FONT_LABEL
+lblTitle.Font               = FONT_HEADER
 lblTitle.TextScaled         = true
 lblTitle.Parent             = TitleBar
 
@@ -272,14 +331,13 @@ btnMinimize.Position         = UDim2.new(1, -60, 0, 2)
 btnMinimize.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
 btnMinimize.Text             = "–"
 btnMinimize.TextColor3       = Color3.fromRGB(255, 255, 255)
-btnMinimize.Font             = FONT_BUTTON
+btnMinimize.Font             = FONT_NORMAL
 btnMinimize.TextScaled       = true
 btnMinimize.BorderSizePixel  = 0
 btnMinimize.Parent           = TitleBar
 
-applyRoundedCorners(btnMinimize, 4)
-applyBorderStroke(btnMinimize, 1, BORDER_COLOR)
-
+applyRounded(btnMinimize, 4)
+applyStroke(btnMinimize, 1, COLOR_BORDER)
 btnMinimize.MouseButton1Click:Connect(toggleMinimize)
 
 -- Tombol Close (“X”)
@@ -290,17 +348,16 @@ btnClose.Position           = UDim2.new(1, -30, 0, 2)
 btnClose.BackgroundColor3   = Color3.fromRGB(200, 50, 50)
 btnClose.Text               = "X"
 btnClose.TextColor3         = Color3.fromRGB(255, 255, 255)
-btnClose.Font               = FONT_BUTTON
+btnClose.Font               = FONT_NORMAL
 btnClose.TextScaled         = true
 btnClose.BorderSizePixel    = 0
 btnClose.Parent             = TitleBar
 
-applyRoundedCorners(btnClose, 4)
-applyBorderStroke(btnClose, 1, BORDER_COLOR)
-
+applyRounded(btnClose, 4)
+applyStroke(btnClose, 1, COLOR_BORDER)
 btnClose.MouseButton1Click:Connect(unloadScript)
 
--- Dragging Behavior untuk TitleBar
+-- Drag behavior untuk TitleBar
 do
     local dragging  = false
     local dragStart = nil
@@ -332,53 +389,299 @@ do
     end)
 end
 
--- Container untuk konten (speed, status, tombol)
-ContentFrame = Instance.new("Frame")
-ContentFrame.Name                = "ContentFrame"
-ContentFrame.Size                = UDim2.new(1, 0, 1, -30)
-ContentFrame.Position            = UDim2.new(0, 0, 0, 30)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.Parent              = MainFrame
+-- TabBar (di bawah TitleBar)
+TabBar = Instance.new("Frame")
+TabBar.Name             = "TabBar"
+TabBar.Size             = UDim2.new(1, 0, 0, 30)
+TabBar.Position         = UDim2.new(0, 0, 0, 30)
+TabBar.BackgroundColor3 = COLOR_FRAME
+TabBar.BorderSizePixel  = 0
+TabBar.Parent           = MainFrame
+
+applyStroke(TabBar, 1, COLOR_BORDER)
+
+-- Tombol Tab: Status
+btnTabStatus = Instance.new("TextButton")
+btnTabStatus.Name             = "TabStatus"
+btnTabStatus.Size             = UDim2.new(0, 120, 1, 0)
+btnTabStatus.Position         = UDim2.new(0, 0, 0, 0)
+btnTabStatus.BackgroundColor3 = COLOR_TAB_ACTIVE
+btnTabStatus.Text             = "Status"
+btnTabStatus.TextColor3       = COLOR_TEXT_HEADER
+btnTabStatus.Font             = FONT_NORMAL
+btnTabStatus.TextScaled       = true
+btnTabStatus.BorderSizePixel  = 0
+btnTabStatus.Parent           = TabBar
+
+applyRounded(btnTabStatus, 4)
+applyStroke(btnTabStatus, 1, COLOR_BORDER)
+btnTabStatus.MouseButton1Click:Connect(function() switchTab("Status") end)
+
+-- Tombol Tab: Teleport
+btnTabTeleport = Instance.new("TextButton")
+btnTabTeleport.Name             = "TabTeleport"
+btnTabTeleport.Size             = UDim2.new(0, 120, 1, 0)
+btnTabTeleport.Position         = UDim2.new(0, 120, 0, 0)
+btnTabTeleport.BackgroundColor3 = COLOR_TAB_INACTIVE
+btnTabTeleport.Text             = "Teleport"
+btnTabTeleport.TextColor3       = COLOR_TEXT_HEADER
+btnTabTeleport.Font             = FONT_NORMAL
+btnTabTeleport.TextScaled       = true
+btnTabTeleport.BorderSizePixel  = 0
+btnTabTeleport.Parent           = TabBar
+
+applyRounded(btnTabTeleport, 4)
+applyStroke(btnTabTeleport, 1, COLOR_BORDER)
+btnTabTeleport.MouseButton1Click:Connect(function() switchTab("Teleport") end)
+
+-- Tombol Tab: Unlimited Jump
+btnTabJump = Instance.new("TextButton")
+btnTabJump.Name             = "TabJump"
+btnTabJump.Size             = UDim2.new(0, 120, 1, 0)
+btnTabJump.Position         = UDim2.new(0, 240, 0, 0)
+btnTabJump.BackgroundColor3 = COLOR_TAB_INACTIVE
+btnTabJump.Text             = "Unlimited Jump"
+btnTabJump.TextColor3       = COLOR_TEXT_HEADER
+btnTabJump.Font             = FONT_NORMAL
+btnTabJump.TextScaled       = true
+btnTabJump.BorderSizePixel  = 0
+btnTabJump.Parent           = TabBar
+
+applyRounded(btnTabJump, 4)
+applyStroke(btnTabJump, 1, COLOR_BORDER)
+btnTabJump.MouseButton1Click:Connect(function() switchTab("Jump") end)
+
+-- ContentArea (frame container di bawah TabBar)
+ContentArea = Instance.new("Frame")
+ContentArea.Name                = "ContentArea"
+ContentArea.Size                = UDim2.new(1, 0, 1, -60)
+ContentArea.Position            = UDim2.new(0, 0, 0, 60)
+ContentArea.BackgroundTransparency = 1
+ContentArea.Parent              = MainFrame
+
+--==========================================================--
+--=== 4A. STATUS TAB =========================================
+--==========================================================--
+
+StatusFrame = Instance.new("Frame")
+StatusFrame.Name             = "StatusFrame"
+StatusFrame.Size             = UDim2.new(1, 0, 1, 0)
+StatusFrame.Position         = UDim2.new(0, 0, 0, 0)
+StatusFrame.BackgroundTransparency = 1
+StatusFrame.Parent           = ContentArea
+
+-- Label Koordinat
+local coordLbl = Instance.new("TextLabel")
+coordLbl.Name               = "CoordinatesLabel"
+coordLbl.Size               = UDim2.new(0.8, 0, 0, 24)
+coordLbl.Position           = UDim2.new(0.1, 0, 0.1, 0)
+coordLbl.BackgroundTransparency = 1
+coordLbl.Text               = "Coords: (n/a)"
+coordLbl.TextColor3         = COLOR_TEXT_HEADER
+coordLbl.Font               = FONT_HEADER
+coordLbl.TextScaled         = true
+coordLbl.TextXAlignment     = Enum.TextXAlignment.Left
+coordLbl.Parent             = StatusFrame
+
+-- Label Money
+local moneyLbl = Instance.new("TextLabel")
+moneyLbl.Name               = "MoneyLabel"
+moneyLbl.Size               = UDim2.new(0.8, 0, 0, 24)
+moneyLbl.Position           = UDim2.new(0.1, 0, 0.3, 0)
+moneyLbl.BackgroundTransparency = 1
+moneyLbl.Text               = "Money: (n/a)"
+moneyLbl.TextColor3         = COLOR_TEXT_HEADER
+moneyLbl.Font               = FONT_HEADER
+moneyLbl.TextScaled         = true
+moneyLbl.TextXAlignment     = Enum.TextXAlignment.Left
+moneyLbl.Parent             = StatusFrame
+
+StatusFrame.CoordinatesLabel = coordLbl
+StatusFrame.MoneyLabel       = moneyLbl
+
+--==========================================================--
+--=== 4B. TELEPORT TAB =======================================
+--==========================================================--
+
+TeleportFrame = Instance.new("Frame")
+TeleportFrame.Name             = "TeleportFrame"
+TeleportFrame.Size             = UDim2.new(1, 0, 1, 0)
+TeleportFrame.Position         = UDim2.new(0, 0, 0, 0)
+TeleportFrame.BackgroundTransparency = 1
+TeleportFrame.Visible          = false
+TeleportFrame.Parent           = ContentArea
+
+-- Label & TextBox X
+local lblX = Instance.new("TextLabel")
+lblX.Size               = UDim2.new(0.3, 0, 0, 24)
+lblX.Position           = UDim2.new(0.1, 0, 0.1, 0)
+lblX.BackgroundTransparency = 1
+lblX.Text               = "X:"
+lblX.TextColor3         = COLOR_TEXT_HEADER
+lblX.Font               = FONT_NORMAL
+lblX.TextScaled         = true
+lblX.TextXAlignment     = Enum.TextXAlignment.Left
+lblX.Parent             = TeleportFrame
+
+txtTeleportX = Instance.new("TextBox")
+txtTeleportX.Size            = UDim2.new(0.4, 0, 0, 24)
+txtTeleportX.Position        = UDim2.new(0.4, 0, 0.1, 0)
+txtTeleportX.BackgroundColor3= COLOR_BUTTON
+txtTeleportX.Text            = "0"
+txtTeleportX.PlaceholderText = "0"
+txtTeleportX.TextColor3      = COLOR_TEXT_HEADER
+txtTeleportX.Font            = FONT_NORMAL
+txtTeleportX.TextScaled      = true
+txtTeleportX.ClearTextOnFocus= false
+txtTeleportX.BorderSizePixel = 0
+txtTeleportX.Parent          = TeleportFrame
+
+applyRounded(txtTeleportX, 4)
+applyStroke(txtTeleportX, 1, COLOR_BORDER)
+
+-- Label & TextBox Y
+local lblY = Instance.new("TextLabel")
+lblY.Size               = UDim2.new(0.3, 0, 0, 24)
+lblY.Position           = UDim2.new(0.1, 0, 0.3, 0)
+lblY.BackgroundTransparency = 1
+lblY.Text               = "Y:"
+lblY.TextColor3         = COLOR_TEXT_HEADER
+lblY.Font               = FONT_NORMAL
+lblY.TextScaled         = true
+lblY.TextXAlignment     = Enum.TextXAlignment.Left
+lblY.Parent             = TeleportFrame
+
+txtTeleportY = Instance.new("TextBox")
+txtTeleportY.Size            = UDim2.new(0.4, 0, 0, 24)
+txtTeleportY.Position        = UDim2.new(0.4, 0, 0.3, 0)
+txtTeleportY.BackgroundColor3= COLOR_BUTTON
+txtTeleportY.Text            = "0"
+txtTeleportY.PlaceholderText = "0"
+txtTeleportY.TextColor3      = COLOR_TEXT_HEADER
+txtTeleportY.Font            = FONT_NORMAL
+txtTeleportY.TextScaled      = true
+txtTeleportY.ClearTextOnFocus= false
+txtTeleportY.BorderSizePixel = 0
+txtTeleportY.Parent          = TeleportFrame
+
+applyRounded(txtTeleportY, 4)
+applyStroke(txtTeleportY, 1, COLOR_BORDER)
+
+-- Label & TextBox Z
+local lblZ = Instance.new("TextLabel")
+lblZ.Size               = UDim2.new(0.3, 0, 0, 24)
+lblZ.Position           = UDim2.new(0.1, 0, 0.5, 0)
+lblZ.BackgroundTransparency = 1
+lblZ.Text               = "Z:"
+lblZ.TextColor3         = COLOR_TEXT_HEADER
+lblZ.Font               = FONT_NORMAL
+lblZ.TextScaled         = true
+lblZ.TextXAlignment     = Enum.TextXAlignment.Left
+lblZ.Parent             = TeleportFrame
+
+txtTeleportZ = Instance.new("TextBox")
+txtTeleportZ.Size            = UDim2.new(0.4, 0, 0, 24)
+txtTeleportZ.Position        = UDim2.new(0.4, 0, 0.5, 0)
+txtTeleportZ.BackgroundColor3= COLOR_BUTTON
+txtTeleportZ.Text            = "0"
+txtTeleportZ.PlaceholderText = "0"
+txtTeleportZ.TextColor3      = COLOR_TEXT_HEADER
+txtTeleportZ.Font            = FONT_NORMAL
+txtTeleportZ.TextScaled      = true
+txtTeleportZ.ClearTextOnFocus= false
+txtTeleportZ.BorderSizePixel = 0
+txtTeleportZ.Parent          = TeleportFrame
+
+applyRounded(txtTeleportZ, 4)
+applyStroke(txtTeleportZ, 1, COLOR_BORDER)
+
+-- Tombol Teleport
+btnTeleport = createButton(
+    TeleportFrame,
+    "BtnTeleport",
+    UDim2.new(0.5, 0, 0, 32),
+    UDim2.new(0.25, 0, 0.75, 0),
+    "Teleport",
+    teleportPlayer
+)
+
+--==========================================================--
+--=== 4C. JUMP TAB ===========================================
+--==========================================================--
+
+JumpFrame = Instance.new("Frame")
+JumpFrame.Name                  = "JumpFrame"
+JumpFrame.Size                  = UDim2.new(1, 0, 1, 0)
+JumpFrame.Position              = UDim2.new(0, 0, 0, 0)
+JumpFrame.BackgroundTransparency = 1
+JumpFrame.Visible               = false
+JumpFrame.Parent                = ContentArea
 
 -- Label & TextBox untuk Jump Speed
-lblSpeedText = Instance.new("TextLabel")
-lblSpeedText.Size               = UDim2.new(0.6, 0, 0, 20)
-lblSpeedText.Position           = UDim2.new(0.05, 0, 0.1, 0)
-lblSpeedText.BackgroundTransparency = 1
-lblSpeedText.Text               = "Jump Speed (jumps/detik):"
-lblSpeedText.TextColor3         = COLOR_TEXT_OFF
-lblSpeedText.Font               = FONT_BUTTON
-lblSpeedText.TextScaled         = true
-lblSpeedText.TextXAlignment     = Enum.TextXAlignment.Left
-lblSpeedText.Parent             = ContentFrame
+local lblJS = Instance.new("TextLabel")
+lblJS.Size               = UDim2.new(0.6, 0, 0, 24)
+lblJS.Position           = UDim2.new(0.1, 0, 0.1, 0)
+lblJS.BackgroundTransparency = 1
+lblJS.Text               = "Jump Speed (jumps/detik):"
+lblJS.TextColor3         = COLOR_TEXT_HEADER
+lblJS.Font               = FONT_NORMAL
+lblJS.TextScaled         = true
+lblJS.TextXAlignment     = Enum.TextXAlignment.Left
+lblJS.Parent             = JumpFrame
 
 txtJumpSpeed = Instance.new("TextBox")
-txtJumpSpeed.Size               = UDim2.new(0.25, 0, 0, 20)
-txtJumpSpeed.Position           = UDim2.new(0.65, 0, 0.1, 0)
-txtJumpSpeed.BackgroundColor3   = COLOR_BUTTON
-txtJumpSpeed.Text               = "5"
-txtJumpSpeed.PlaceholderText    = "5"
-txtJumpSpeed.TextColor3         = COLOR_TEXT_OFF
-txtJumpSpeed.Font               = FONT_BUTTON
-txtJumpSpeed.TextScaled         = true
-txtJumpSpeed.ClearTextOnFocus   = false
-txtJumpSpeed.BorderSizePixel    = 0
-txtJumpSpeed.Parent             = ContentFrame
+txtJumpSpeed.Size            = UDim2.new(0.3, 0, 0, 24)
+txtJumpSpeed.Position        = UDim2.new(0.6, 0, 0.1, 0)
+txtJumpSpeed.BackgroundColor3= COLOR_BUTTON
+txtJumpSpeed.Text            = "5"
+txtJumpSpeed.PlaceholderText = "5"
+txtJumpSpeed.TextColor3      = COLOR_TEXT_HEADER
+txtJumpSpeed.Font            = FONT_NORMAL
+txtJumpSpeed.TextScaled      = true
+txtJumpSpeed.ClearTextOnFocus= false
+txtJumpSpeed.BorderSizePixel = 0
+txtJumpSpeed.Parent          = JumpFrame
 
-applyRoundedCorners(txtJumpSpeed, 4)
-applyBorderStroke(txtJumpSpeed, 1, BORDER_COLOR)
+applyRounded(txtJumpSpeed, 4)
+applyStroke(txtJumpSpeed, 1, COLOR_BORDER)
 
--- Status Label (ON/OFF) untuk Unlimited Jump
-lblJumpStatus = createStatusLabel(ContentFrame, UDim2.new(0.65, 0, 0.4, 0))
-lblJumpStatus.Text = "OFF"
-lblJumpStatus.TextColor3 = COLOR_TEXT_OFF
+-- Status Label ON/OFF
+lblJumpStatus = Instance.new("TextLabel")
+lblJumpStatus.Size               = UDim2.new(0.4, 0, 0, 24)
+lblJumpStatus.Position           = UDim2.new(0.55, 0, 0.3, 0)
+lblJumpStatus.BackgroundColor3   = COLOR_FRAME
+lblJumpStatus.BorderSizePixel    = 0
+lblJumpStatus.Text               = "OFF"
+lblJumpStatus.TextColor3         = COLOR_TEXT_OFF
+lblJumpStatus.Font               = FONT_HEADER
+lblJumpStatus.TextScaled         = true
+lblJumpStatus.Parent             = JumpFrame
+
+applyRounded(lblJumpStatus, 4)
+applyStroke(lblJumpStatus, 1, COLOR_BORDER)
 
 -- Tombol Toggle Unlimited Jump
-btnJump = createButton(ContentFrame, "BtnUnlimitedJump", 0.6, "Toggle Unlimited Jump", function()
-    toggleUnlimitedJump()
-end)
+btnJumpToggle = createButton(
+    JumpFrame,
+    "BtnJumpToggle",
+    UDim2.new(0.5, 0, 0, 32),
+    UDim2.new(0.25, 0, 0.6, 0),
+    "Toggle Unlimited Jump",
+    toggleUnlimitedJump
+)
 
 --==========================================================--
---=== 5. LOG KONFIRMASI ===============------------------------
+--=== 5. KONEKSI & UPDATE LOOP ==============================--
 --==========================================================--
-print("HXEL Unlimited Jump v2.1 Loaded.") 
+
+-- Hubungkan updateStatus ke Heartbeat
+RunService.Heartbeat:Connect(updateStatus)
+
+-- Default aktifkan tab “Status”
+switchTab("Status")
+
+--==========================================================--
+--=== 6. LOG KONFIRMASI =======================================
+--==========================================================--
+
+print("HXEL Multi‐Tab UI v2.2 Loaded.")
