@@ -315,3 +315,86 @@ do
         end
     end)
 end
+
+-- ─── TAB "Auto" ─────────────────────────────────────────────────────────────
+local AutoTab = Window:CreateTab("Auto", nil)
+AutoTab:CreateSection("Auto Lock")
+
+-- State untuk Auto Lock
+local lockEnabled = false
+local lockRadius  = 50
+
+-- Toggle untuk mengaktifkan atau mematikan Auto Lock
+AutoTab:CreateToggle({
+    Name     = "Enable Auto Lock",
+    Flag     = "AutoLockToggle",
+    Value    = false,
+    Callback = function(value)
+        lockEnabled = value
+    end
+})
+
+-- Slider untuk mengatur radius Auto Lock (dalam stud)
+AutoTab:CreateSlider({
+    Name         = "Lock Radius",
+    SliderText   = "Studs",
+    Range        = {0, 500},
+    Increment    = 5,
+    Suffix       = " studs",
+    CurrentValue = 50,
+    Flag         = "LockRadius",
+    Callback     = function(value)
+        lockRadius = value
+    end
+})
+
+-- Fungsi bantu untuk menemukan pemain terdekat (selain diri sendiri) dalam radius
+local function findNearestTarget()
+    local Players = game:GetService("Players")
+    local player  = Players.LocalPlayer
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+
+    local rootPos = player.Character.HumanoidRootPart.Position
+    local nearestDist = lockRadius
+    local nearestPlayer = nil
+
+    for _, other in ipairs(Players:GetPlayers()) do
+        if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+            local otherPos = other.Character.HumanoidRootPart.Position
+            local dist = (rootPos - otherPos).Magnitude
+            if dist <= nearestDist then
+                nearestDist = dist
+                nearestPlayer = other
+            end
+        end
+    end
+
+    return nearestPlayer
+end
+
+-- Loop RenderStepped untuk mengunci kamera ke target saat Auto Lock aktif
+do
+    local RunService = game:GetService("RunService")
+    local camera     = workspace.CurrentCamera
+    local Players    = game:GetService("Players")
+    local player     = Players.LocalPlayer
+
+    RunService.RenderStepped:Connect(function()
+        if not lockEnabled then
+            return
+        end
+
+        -- Pastikan karakter local player ada dan kamera valid
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
+            local target = findNearestTarget()
+            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                local targetPos = target.Character.HumanoidRootPart.Position
+                -- Tetap di posisi kamera saat ini, tetapi arahkan ke target
+                local camPos = camera.CFrame.Position
+                camera.CFrame = CFrame.new(camPos, targetPos)
+            end
+        end
+    end)
+end
