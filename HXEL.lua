@@ -468,3 +468,87 @@ do
         end
     end)
 end
+-- ─── TAB "Player" ───────────────────────────────────────────────────────────
+local PlayerTab = Window:CreateTab("Player", nil)
+PlayerTab:CreateSection("Player Settings")
+
+-- Status invincible (Max HP)
+local invincibleEnabled = false
+
+-- Fungsi untuk mengunci HP ke nilai maksimum
+local function applyInvincibility(humanoid)
+    if not humanoid or humanoid.Health <= 0 then return end
+    -- Simpan nilai MaxHealth
+    local maxH = humanoid.MaxHealth
+
+    -- Set Health selalu ke MaxHealth setiap frame
+    local connection
+    connection = game:GetService("RunService").RenderStepped:Connect(function()
+        if invincibleEnabled and humanoid.Health < maxH then
+            humanoid.Health = maxH
+        end
+        if not invincibleEnabled and connection then
+            connection:Disconnect()
+        end
+    end)
+end
+
+-- Callback ketika karakter respawn / loaded
+local function onCharacterAdded(char)
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        -- Pastikan Health di‐set ulang ke MaxHealth segera
+        if invincibleEnabled then
+            humanoid.Health = humanoid.MaxHealth
+        end
+        applyInvincibility(humanoid)
+    end
+end
+
+-- Bind ketika pemain pertama kali join (jika sudah ada character)
+local player = game:GetService("Players").LocalPlayer
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Toggle untuk mengaktifkan/mematikan Max HP
+PlayerTab:CreateToggle({
+    Name     = "Enable Max HP (Invincible)",
+    Flag     = "MaxHPToggle",
+    Value    = false,
+    Callback = function(value)
+        invincibleEnabled = value
+
+        -- Jika diaktifkan, set Humanoid.Health ke Max sekarang juga
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                if invincibleEnabled then
+                    humanoid.Health = humanoid.MaxHealth
+                    -- Pastikan juga MaxHealth ditinggikan jika perlu (opsional)
+                    -- humanoid.MaxHealth = math.huge
+                end
+                -- Mulai loop applyInvincibility di applyInvincibility()
+                applyInvincibility(humanoid)
+            end
+        end
+
+        -- Tampilkan notifikasi kecil
+        if invincibleEnabled then
+            PlayerTab:CreateNotification({
+                Title   = "Max HP Aktif",
+                Content = "Player sekarang tidak akan kehilangan HP.",
+                Duration= 3
+            })
+        else
+            PlayerTab:CreateNotification({
+                Title   = "Max HP Dimatikan",
+                Content = "Player kembali bisa menerima damage.",
+                Duration= 3
+            })
+        end
+    end
+})
