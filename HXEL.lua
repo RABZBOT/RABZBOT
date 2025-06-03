@@ -316,7 +316,7 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Perbaikan Auto‐Aim ke Kepala) ─────────────────────────────
+-- ─── TAB "Auto" (Perbaikan Auto‐Aim ke Kepala + LOS Check) ─────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
 
@@ -406,7 +406,38 @@ local function canBeTargeted(localPlayer, otherPlayer)
     return true
 end
 
--- Fungsi menemukan pemain terdekat dalam radius, dengan pengecekan canBeTargeted()
+-- Fungsi tambahan: periksa line‐of‐sight (LOS) antara kamera lokal dengan targetPart
+-- Mengembalikan true jika ray menuju targetPart tidak terhalang objek lain
+local function hasLineOfSight(localPlayer, targetPart)
+    if not targetPart then
+        return false
+    end
+
+    local camera = workspace.CurrentCamera
+    local origin = camera.CFrame.Position
+    local direction = (targetPart.Position - origin)
+
+    -- Siapkan RaycastParams untuk mengabaikan karakter pemain sendiri
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.FilterDescendantsInstances = { localPlayer.Character }
+    rayParams.IgnoreWater = true
+
+    local rayResult = workspace:Raycast(origin, direction, rayParams)
+    if rayResult and rayResult.Instance then
+        -- Jika objek pertama yang kena adalah bagian dari karakter target, maka LOS ada
+        if rayResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return true
+        else
+            return false
+        end
+    end
+
+    -- Jika rayResult nil (tidak menabrak apa‐apa) maka LOS dianggap terhalang
+    return false
+end
+
+-- Fungsi menemukan pemain terdekat dalam radius, dengan pengecekan canBeTargeted() + LOS
 local function findNearestTarget()
     local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
@@ -414,18 +445,33 @@ local function findNearestTarget()
         return nil
     end
 
-    local rootPos      = localPlayer.Character.HumanoidRootPart.Position
-    local nearestDist  = lockRadius
+    local rootPos       = localPlayer.Character.HumanoidRootPart.Position
+    local nearestDist   = lockRadius
     local nearestPlayer = nil
 
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= localPlayer and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
             if canBeTargeted(localPlayer, other) then
-                local otherPos = other.Character.HumanoidRootPart.Position
-                local dist = (rootPos - otherPos).Magnitude
-                if dist <= nearestDist then
-                    nearestDist = dist
-                    nearestPlayer = other
+                -- Tentukan targetPart (Head atau Body)
+                local targetPart = nil
+                if targetPartOption == "Head" then
+                    targetPart = other.Character:FindFirstChild("Head")
+                else
+                    -- Gunakan HumanoidRootPart sebagai "Body"
+                    targetPart = other.Character:FindFirstChild("HumanoidRootPart")
+                end
+
+                if targetPart then
+                    -- Cek jarak
+                    local otherPos = other.Character.HumanoidRootPart.Position
+                    local dist = (rootPos - otherPos).Magnitude
+                    if dist <= nearestDist then
+                        -- Cek line‐of‐sight
+                        if hasLineOfSight(localPlayer, targetPart) then
+                            nearestDist   = dist
+                            nearestPlayer = other
+                        end
+                    end
                 end
             end
         end
@@ -435,39 +481,31 @@ local function findNearestTarget()
 end
 
 -- Loop RenderStepped untuk auto‐aim saat aktif
-do
-    local RunService = game:GetService("RunService")
-    local Players    = game:GetService("Players")
-    local player     = Players.LocalPlayer
-    local camera     = workspace.CurrentCamera
+game:GetService("RunService").RenderStepped:Connect(function()
+    if not lockEnabled then
+        return
+    end
 
-    RunService.RenderStepped:Connect(function()
-        if not lockEnabled then
-            return
+    local camera      = workspace.CurrentCamera
+    local localPlayer = game:GetService("Players").LocalPlayer
+    local targetPlayer = findNearestTarget()
+
+    if targetPlayer and targetPlayer.Character then
+        -- Ambil part target yang sudah dipilih (Head/Body)
+        local partToAim = nil
+        if targetPartOption == "Head" then
+            partToAim = targetPlayer.Character:FindFirstChild("Head")
+        else
+            partToAim = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
         end
 
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and camera then
-            local target = findNearestTarget()
-            if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
-                if targetHum and targetHum.Health > 0 then
-                    -- Tentukan posisi part: Head atau HumanoidRootPart (Body)
-                    local targetPos
-                    if targetPartOption == "Head" and target.Character:FindFirstChild("Head") then
-                        targetPos = target.Character.Head.Position
-                    else
-                        targetPos = target.Character.HumanoidRootPart.Position
-                    end
-
-                    -- Posisi kamera saat ini
-                    local camPos = camera.CFrame.Position
-                    -- Arahkan kamera ke targetPos
-                    camera.CFrame = CFrame.new(camPos, targetPos)
-                end
-            end
+        if partToAim then
+            -- Gerakkan kamera ke arah targetPart (lock pada posisi target)
+            camera.CFrame = CFrame.new(camera.CFrame.Position, partToAim.Position)
         end
-    end)
-end
+    end
+end)
+
 -- ─── TAB "Player" ───────────────────────────────────────────────────────────
 local PlayerTab = Window:CreateTab("Player", nil)
 PlayerTab:CreateSection("Player Settings")
