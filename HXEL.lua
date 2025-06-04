@@ -316,7 +316,7 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Perbaikan Auto‐Aim Smooth + Prediksi Gerakan) ─────────────────
+-- ─── TAB "Auto" (Auto‐Aim Smooth + Prediksi Gerakan + Slider Smoothness) ─────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
 
@@ -325,8 +325,9 @@ local lockEnabled      = false
 local lockRadius       = 50
 local targetPartOption = "Head"   -- Pilihan: "Head" atau "Body"
 local originalCamType  = nil      -- Menyimpan CameraType sebelum auto‐aim
+
 -- Parameter tambahan untuk smoothing dan prediksi
-local smoothSpeed      = 0.15     -- Semakin kecil, semakin halus (0 < smoothSpeed < 1)
+local smoothSpeed      = 0.15     -- Semakin kecil, semakin halus (0 < smoothSpeed < 1). Nilai default.
 local predictionFactor = 0.1      -- Lama prediksi (dalam detik) berdasarkan velocity
 
 -- Toggle untuk mengaktifkan atau mematikan Auto Lock/Aim
@@ -374,6 +375,35 @@ AutoTab:CreateDropdown({
         targetPartOption = option
     end
 })
+
+-- Slider untuk mengatur smoothSpeed (0.00 – 1.00)
+AutoTab:CreateSlider({
+    Name         = "Smooth Speed",
+    SliderText   = "",
+    Range        = {0, 1},
+    Increment    = 0.01,
+    Suffix       = "",            -- Tidak perlu suffix “studs” karena ini nilai rasio
+    CurrentValue = smoothSpeed,
+    Flag         = "SmoothSpeed",
+    Callback     = function(value)
+        -- value di sini antara 0.00 sampai 1.00
+        smoothSpeed = value
+    end
+})
+
+-- (Opsional: jika ingin mengatur predictionFactor juga, uncomment bagian berikut)
+-- AutoTab:CreateSlider({
+--     Name         = "Prediction Factor",
+--     SliderText   = "",
+--     Range        = {0, 1},
+--     Increment    = 0.01,
+--     Suffix       = "",
+--     CurrentValue = predictionFactor,
+--     Flag         = "PredictionFactor",
+--     Callback     = function(value)
+--         predictionFactor = value
+--     end
+-- })
 
 -- Fungsi bantu: periksa apakah pemain dapat di‐aim
 -- Kriteria:
@@ -513,7 +543,7 @@ game:GetService("RunService").RenderStepped:Connect(function()
         local desiredCFrame = CFrame.new(camPos, predictedPos)
 
         -- Lakukan interpolasi (lerp) antara CFrame kamera sekarang dan target
-        -- smoothSpeed menentukan seberapa cepat kamera bergerak ke target (0.0 = diam total, 1.0 = langsung kearah target)
+        -- smoothSpeed ditentukan oleh slider “Smooth Speed” (0.00 – 1.00)
         camera.CFrame = camera.CFrame:Lerp(desiredCFrame, smoothSpeed)
     end
 end)
