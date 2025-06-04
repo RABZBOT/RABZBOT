@@ -316,29 +316,30 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Auto‐Aim Smooth + Prediksi Gerakan + Slider Smoothness) ─────────────────
+-- ─── TAB "Auto" (Auto‐Aim + Input Max Distance + Smooth + Akurasi 100%) ─────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
 
 -- State untuk Auto Lock / Aim
 local lockEnabled      = false
-local lockRadius       = 50
-local targetPartOption = "Head"   -- Pilihan: "Head" atau "Body"
-local originalCamType  = nil      -- Menyimpan CameraType sebelum auto‐aim
+local maxDistance      = 50      -- Jarak maksimal (default 50 studs), sekarang lewat textbox
+local targetPartOption = "Head"  -- Pilihan: "Head" atau "Body"
+local originalCamType  = nil     -- Menyimpan CameraType sebelum auto‐aim
 
--- Parameter tambahan untuk smoothing dan prediksi
-local smoothSpeed      = 0.15     -- Semakin kecil, semakin halus (0 < smoothSpeed < 1). Nilai default.
-local predictionFactor = 0.1      -- Lama prediksi (dalam detik) berdasarkan velocity
+-- Parameter tambahan untuk smoothing, prediksi, dan akurasi
+local smoothSpeed        = 0.15  -- (0 < smoothSpeed < 1). Semakin kecil = lebih halus, semakin besar = lebih “snap”.
+local predictionFactor   = 0.1   -- Prediksi posisi target (velocity * predictionFactor)
+local snapAngleThreshold = 0.01  -- Batas sudut (radian). Jika perbedaan sudut < 0.01 rad, langsung snap (100% akurat).
 
--- Toggle untuk mengaktifkan atau mematikan Auto Lock/Aim
+-- Toggle untuk mengaktifkan/mematikan Auto Aim
 AutoTab:CreateToggle({
     Name     = "Enable Auto Aim",
     Flag     = "AutoAimToggle",
     Value    = false,
     Callback = function(value)
         lockEnabled = value
-
         local camera = workspace.CurrentCamera
+
         if lockEnabled then
             -- Simpan CameraType saat ini, lalu set jadi Scriptable
             originalCamType = camera.CameraType
@@ -350,17 +351,20 @@ AutoTab:CreateToggle({
     end
 })
 
--- Slider untuk mengatur radius Auto Aim (dalam stud)
-AutoTab:CreateSlider({
-    Name         = "Aim Radius",
-    SliderText   = "Studs",
-    Range        = {0, 500},
-    Increment    = 5,
-    Suffix       = " studs",
-    CurrentValue = lockRadius,
-    Flag         = "AimRadius",
-    Callback     = function(value)
-        lockRadius = value
+-- Textbox untuk mengatur Max Distance (dalam stud)
+AutoTab:CreateTextbox({
+    Name            = "Max Distance",
+    Flag            = "MaxDistance",
+    Value           = tostring(maxDistance),
+    PlaceholderText = "Masukkan jarak maksimal (stud)",
+    Callback        = function(value)
+        local num = tonumber(value)
+        if num and num >= 0 then
+            maxDistance = num
+        else
+            -- Jika input bukan angka valid, kembalikan ke nilai sebelumnya
+            AutoTab:RefreshFlag("MaxDistance", tostring(maxDistance))
+        end
     end
 })
 
@@ -376,34 +380,48 @@ AutoTab:CreateDropdown({
     end
 })
 
--- Slider untuk mengatur smoothSpeed (0.00 – 1.00)
+-- Slider untuk mengatur Smooth Speed (0.00 – 1.00)
 AutoTab:CreateSlider({
     Name         = "Smooth Speed",
     SliderText   = "",
     Range        = {0, 1},
     Increment    = 0.01,
-    Suffix       = "",            -- Tidak perlu suffix “studs” karena ini nilai rasio
+    Suffix       = "",
     CurrentValue = smoothSpeed,
     Flag         = "SmoothSpeed",
     Callback     = function(value)
-        -- value di sini antara 0.00 sampai 1.00
         smoothSpeed = value
     end
 })
 
--- (Opsional: jika ingin mengatur predictionFactor juga, uncomment bagian berikut)
--- AutoTab:CreateSlider({
---     Name         = "Prediction Factor",
---     SliderText   = "",
---     Range        = {0, 1},
---     Increment    = 0.01,
---     Suffix       = "",
---     CurrentValue = predictionFactor,
---     Flag         = "PredictionFactor",
---     Callback     = function(value)
---         predictionFactor = value
---     end
--- })
+-- (Opsional) Slider untuk mengatur Prediction Factor (0.00 – 1.00), jika dibutuhkan
+ AutoTab:CreateSlider({
+     Name         = "Prediction Factor",
+     SliderText   = "",
+     Range        = {0, 1},
+     Increment    = 0.01,
+     Suffix       = "",
+     CurrentValue = predictionFactor,
+     Flag         = "PredictionFactor",
+     Callback     = function(value)
+         predictionFactor = value
+     end
+ })
+
+-- (Opsional) Slider untuk mengatur Snap Angle Threshold (0.001 – 0.1 rad), 
+-- jika ingin ubah batas sudut “snap” agar lebih ketat/longgar.
+ AutoTab:CreateSlider({
+     Name         = "Snap Angle Threshold",
+     SliderText   = "",
+     Range        = {0.001, 0.1},
+     Increment    = 0.001,
+     Suffix       = "",
+     CurrentValue = snapAngleThreshold,
+     Flag         = "SnapAngle",
+     Callback     = function(value)
+         snapAngleThreshold = value
+     end
+ })
 
 -- Fungsi bantu: periksa apakah pemain dapat di‐aim
 -- Kriteria:
@@ -470,7 +488,7 @@ local function hasLineOfSight(localPlayer, targetPart)
     return false
 end
 
--- Fungsi menemukan pemain terdekat dalam radius, dengan pengecekan canBeTargeted() + LOS
+-- Fungsi menemukan pemain terdekat dalam maxDistance, dengan pengecekan canBeTargeted() + LOS
 local function findNearestTarget()
     local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
@@ -479,7 +497,7 @@ local function findNearestTarget()
     end
 
     local rootPos       = localPlayer.Character.HumanoidRootPart.Position
-    local nearestDist   = lockRadius
+    local nearestDist   = maxDistance
     local nearestPlayer = nil
     local nearestPart   = nil
 
@@ -526,25 +544,37 @@ game:GetService("RunService").RenderStepped:Connect(function()
     local targetPlayer, targetPart = findNearestTarget()
 
     if targetPlayer and targetPart then
-        -- Dapatkan posisi kamera saat ini
+        -- Posisi kamera saat ini
         local camPos = camera.CFrame.Position
 
-        -- Prediksi posisi target: pos yang diperkirakan = posisi sekarang + velocity * factor
-        local predictedPos = nil
+        -- Prediksi posisi target: posisi sekarang + velocity * predictionFactor
+        local predictedPos
         if targetPart:IsA("BasePart") then
-            -- Gunakan HumanoidRootPart atau Head velocity (jika tersedia)
             local velocity = targetPart.Velocity or Vector3.new(0, 0, 0)
             predictedPos = targetPart.Position + velocity * predictionFactor
         else
             predictedPos = targetPart.Position
         end
 
-        -- Buat CFrame tujuan yang mengarah ke posisi prediksi target
+        -- Buat CFrame “desired” untuk mengarah ke posisi prediksi
         local desiredCFrame = CFrame.new(camPos, predictedPos)
 
-        -- Lakukan interpolasi (lerp) antara CFrame kamera sekarang dan target
-        -- smoothSpeed ditentukan oleh slider “Smooth Speed” (0.00 – 1.00)
-        camera.CFrame = camera.CFrame:Lerp(desiredCFrame, smoothSpeed)
+        -- INTERPOLASI (lerp) untuk smooth movement
+        local newCFrame = camera.CFrame:Lerp(desiredCFrame, smoothSpeed)
+        camera.CFrame = newCFrame
+
+        -- Setelah lerp, cek seberapa dekat sudut antara arah kamera sekarang dan arah ke target
+        local currentLook = newCFrame.LookVector
+        local desiredDir  = (predictedPos - camPos).Unit
+        local dotValue    = currentLook:Dot(desiredDir)
+        -- dotValue = 1 artinya sudut 0°, semakin mendekati 1 semakin kecil sudut
+        -- Hitung sudut: acos(dotValue)
+        local angle = math.acos( math.clamp(dotValue, -1, 1) )
+
+        -- Jika sudut < snapAngleThreshold (misalnya 0.01 rad ≈ 0.57°), maka langsung snap
+        if angle < snapAngleThreshold then
+            camera.CFrame = desiredCFrame
+        end
     end
 end)
 
