@@ -316,15 +316,18 @@ do
     end)
 end
 
--- ─── TAB "Auto" (Perbaikan Auto‐Aim ke Kepala + LOS Check) ─────────────────
+-- ─── TAB "Auto" (Perbaikan Auto‐Aim Smooth + Prediksi Gerakan) ─────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
 
 -- State untuk Auto Lock / Aim
 local lockEnabled      = false
 local lockRadius       = 50
-local targetPartOption = "Head"  -- Pilihan: "Head" atau "Body"
-local originalCamType  = nil     -- Akan menyimpan CameraType sebelum auto‐aim
+local targetPartOption = "Head"   -- Pilihan: "Head" atau "Body"
+local originalCamType  = nil      -- Menyimpan CameraType sebelum auto‐aim
+-- Parameter tambahan untuk smoothing dan prediksi
+local smoothSpeed      = 0.15     -- Semakin kecil, semakin halus (0 < smoothSpeed < 1)
+local predictionFactor = 0.1      -- Lama prediksi (dalam detik) berdasarkan velocity
 
 -- Toggle untuk mengaktifkan atau mematikan Auto Lock/Aim
 AutoTab:CreateToggle({
@@ -442,12 +445,13 @@ local function findNearestTarget()
     local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
     if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
+        return nil, nil
     end
 
     local rootPos       = localPlayer.Character.HumanoidRootPart.Position
     local nearestDist   = lockRadius
     local nearestPlayer = nil
+    local nearestPart   = nil
 
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= localPlayer and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
@@ -462,7 +466,7 @@ local function findNearestTarget()
                 end
 
                 if targetPart then
-                    -- Cek jarak
+                    -- Cek jarak (dari HumanoidRootPart)
                     local otherPos = other.Character.HumanoidRootPart.Position
                     local dist = (rootPos - otherPos).Magnitude
                     if dist <= nearestDist then
@@ -470,6 +474,7 @@ local function findNearestTarget()
                         if hasLineOfSight(localPlayer, targetPart) then
                             nearestDist   = dist
                             nearestPlayer = other
+                            nearestPart   = targetPart
                         end
                     end
                 end
@@ -477,7 +482,7 @@ local function findNearestTarget()
         end
     end
 
-    return nearestPlayer
+    return nearestPlayer, nearestPart
 end
 
 -- Loop RenderStepped untuk auto‐aim saat aktif
@@ -488,21 +493,28 @@ game:GetService("RunService").RenderStepped:Connect(function()
 
     local camera      = workspace.CurrentCamera
     local localPlayer = game:GetService("Players").LocalPlayer
-    local targetPlayer = findNearestTarget()
+    local targetPlayer, targetPart = findNearestTarget()
 
-    if targetPlayer and targetPlayer.Character then
-        -- Ambil part target yang sudah dipilih (Head/Body)
-        local partToAim = nil
-        if targetPartOption == "Head" then
-            partToAim = targetPlayer.Character:FindFirstChild("Head")
+    if targetPlayer and targetPart then
+        -- Dapatkan posisi kamera saat ini
+        local camPos = camera.CFrame.Position
+
+        -- Prediksi posisi target: pos yang diperkirakan = posisi sekarang + velocity * factor
+        local predictedPos = nil
+        if targetPart:IsA("BasePart") then
+            -- Gunakan HumanoidRootPart atau Head velocity (jika tersedia)
+            local velocity = targetPart.Velocity or Vector3.new(0, 0, 0)
+            predictedPos = targetPart.Position + velocity * predictionFactor
         else
-            partToAim = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            predictedPos = targetPart.Position
         end
 
-        if partToAim then
-            -- Gerakkan kamera ke arah targetPart (lock pada posisi target)
-            camera.CFrame = CFrame.new(camera.CFrame.Position, partToAim.Position)
-        end
+        -- Buat CFrame tujuan yang mengarah ke posisi prediksi target
+        local desiredCFrame = CFrame.new(camPos, predictedPos)
+
+        -- Lakukan interpolasi (lerp) antara CFrame kamera sekarang dan target
+        -- smoothSpeed menentukan seberapa cepat kamera bergerak ke target (0.0 = diam total, 1.0 = langsung kearah target)
+        camera.CFrame = camera.CFrame:Lerp(desiredCFrame, smoothSpeed)
     end
 end)
 
