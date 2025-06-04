@@ -315,7 +315,6 @@ do
         end
     end)
 end
-
 -- ─── TAB "Auto" (Auto‐Aim + Input Max Distance + Smooth + Akurasi 100%) ─────────────────
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
@@ -577,6 +576,7 @@ game:GetService("RunService").RenderStepped:Connect(function()
         end
     end
 end)
+
 
 -- ─── TAB "Player" ───────────────────────────────────────────────────────────
 local PlayerTab = Window:CreateTab("Player", nil)
