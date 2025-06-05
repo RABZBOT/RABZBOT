@@ -1,9 +1,6 @@
-
-
-
--- Lengkapi dan perbaiki kode Rayfield: Infinite Jump otomatis di tab “test1”
-
--- Memuat library Rayfield dan membuat jendela utama
+-- ===============================================
+-- MEMUAT RAYFIELD & MEMBUAT JENDELA UTAMA
+-- ===============================================
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name = "HXEL",
@@ -11,16 +8,22 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "Delta Executor"
 })
 
--- ─── TAB "Stats" ────────────────────────────────────────────────────────────
+-- ===============================================
+-- TAB "Stats"
+-- ===============================================
 local StatsTab = Window:CreateTab("Stats", nil)
 StatsTab:CreateSection("Data Statistik")
 
--- Buat tiga label: Koordinat, Money, dan Touch Player
+-- 1) Label Koordinat
 local coordLabel = StatsTab:CreateLabel("Koordinat: Memuat...")
+
+-- 2) Label Money
 local moneyLabel = StatsTab:CreateLabel("Money: Memuat...")
+
+-- 3) Label Touch Player
 local touchLabel = StatsTab:CreateLabel("Touch Player: Belum ada")
 
--- 1) Pembaruan real‐time Koordinat (setiap frame)
+-- Update koordinat setiap frame
 do
     local RunService = game:GetService("RunService")
     local Players    = game:GetService("Players")
@@ -38,7 +41,7 @@ do
     end)
 end
 
--- 2) Pembaruan Money via event Changed
+-- Update money via leaderstats Changed
 do
     local Players = game:GetService("Players")
     local player  = Players.LocalPlayer
@@ -56,18 +59,19 @@ do
             bindMoneyStat(ls.Money)
         end
     end
+
     player.ChildAdded:Connect(function(child)
         if child.Name == "leaderstats" then
             wait(0.1)
             local ls = player.leaderstats
-            if ls:FindFirstChild("Money") then
+            if ls and ls:FindFirstChild("Money") then
                 bindMoneyStat(ls.Money)
             end
         end
     end)
 end
 
--- 3) Deteksi “Touch Player” pada HumanoidRootPart
+-- Deteksi "Touch Player" pada HumanoidRootPart
 do
     local Players = game:GetService("Players")
     local player  = Players.LocalPlayer
@@ -88,30 +92,30 @@ do
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         connectTouch(player.Character.HumanoidRootPart)
     end
+
     player.CharacterAdded:Connect(function(char)
         char:WaitForChild("HumanoidRootPart")
         connectTouch(char.HumanoidRootPart)
     end)
 end
 
--- ─── TAB "test1" ───────────────────────────────────────────────────────────
+-- ===============================================
+-- TAB "test1"  (Infinite Jump & Auto-Farm)
+-- ===============================================
 local Test1Tab = Window:CreateTab("test1", nil)
 Test1Tab:CreateSection("Farm & Infinite Jump")
 
--- Variabel untuk Infinite Jump otomatis
 local farmEnabled     = false
 local customJumpPower = 50
 
--- Toggle untuk mengaktifkan Infinite Jump otomatis
-local farmToggle = Test1Tab:CreateToggle({
+-- Toggle: Enable Infinite Jump
+Test1Tab:CreateToggle({
     Name     = "Enable Infinite Jump",
-    Flag     = "EnableFarm",
-    Value    = false,
+    CurrentValue = false,
     Callback = function(value)
         farmEnabled = value
         local player = game:GetService("Players").LocalPlayer
         if not farmEnabled and player.Character then
-            -- Kembalikan JumpPower ke default saat dinonaktifkan
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if humanoid then
                 humanoid.JumpPower = 50
@@ -120,15 +124,13 @@ local farmToggle = Test1Tab:CreateToggle({
     end
 })
 
--- Slider untuk mengatur tinggi lompatan (JumpPower)
+-- Slider: Atur JumpPower (0-200)
 local jumpPowerSlider = Test1Tab:CreateSlider({
     Name         = "Jump Height",
-    SliderText   = "Power",
     Range        = {0, 200},
     Increment    = 1,
     Suffix       = "",
     CurrentValue = 50,
-    Flag         = "JumpPower",
     Callback     = function(value)
         customJumpPower = value
         if farmEnabled then
@@ -143,12 +145,12 @@ local jumpPowerSlider = Test1Tab:CreateSlider({
     end
 })
 
--- Tombol “Reset Jump Power” untuk mengembalikan ke default (50)
+-- Button: Reset JumpPower ke 50
 Test1Tab:CreateButton({
     Name     = "Reset Jump Power",
     Callback = function()
         customJumpPower = 50
-        jumpPowerSlider:Update(50)
+        jumpPowerSlider:Set(50)
         if farmEnabled then
             local player = game:GetService("Players").LocalPlayer
             if player.Character then
@@ -161,7 +163,7 @@ Test1Tab:CreateButton({
     end
 })
 
--- Logika Infinite Jump otomatis (RunService.Heartbeat)
+-- Infinite Jump terus-menerus (Heartbeat)
 do
     local RunService = game:GetService("RunService")
     local Players    = game:GetService("Players")
@@ -169,27 +171,23 @@ do
 
     RunService.Heartbeat:Connect(function()
         if not farmEnabled then return end
-
         if player.Character then
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                -- Terapkan custom JumpPower
                 humanoid.JumpPower = customJumpPower
-                -- Paksa Humanoid lompat terus‐menerus meski di udara
                 humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end
     end)
 end
 
--- Contoh logika auto‐farm (opsional): menghancurkan objek “Coin” bila disentuh
+-- Auto-Farm (hancurkan objek bernama "Coin" saat disentuh)
 do
     local Players = game:GetService("Players")
     local player  = Players.LocalPlayer
 
     local function onTouched(hit)
         if not farmEnabled then return end
-        -- Jika bagian yang disentuh bernama “Coin” atau berada dalam Model yang bernama “Coin”
         if hit.Name == "Coin" or (hit.Parent and hit.Parent.Name == "Coin") then
             if hit.Parent:IsA("Model") then
                 hit.Parent:Destroy()
@@ -212,83 +210,79 @@ do
     end)
 end
 
--- Tambahkan di bagian pembuatan TAB “test2” agar berisi fitur teleport ketinggian
--- Asumsi: Anda sudah memuat Rayfield dan membuat Window sebelumnya
-
--- ─── TAB "test2" ───────────────────────────────────────────────────────────
+-- ===============================================
+-- TAB "test2"  (Teleport Ketinggian)
+-- ===============================================
 local Test2Tab = Window:CreateTab("test2", nil)
 Test2Tab:CreateSection("Teleport Ketinggian")
 
--- Tombol Teleport +1000Y
+-- Teleport +1000Y
 Test2Tab:CreateButton({
     Name = "Teleport +1000Y",
     Callback = function()
         local player = game:GetService("Players").LocalPlayer
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local root = player.Character.HumanoidRootPart
-            local pos = root.Position
+            local pos  = root.Position
             root.CFrame = CFrame.new(pos.X, pos.Y + 1000, pos.Z)
         end
     end
 })
 
--- Tombol Teleport +5000Y
+-- Teleport +5000Y
 Test2Tab:CreateButton({
     Name = "Teleport +5000Y",
     Callback = function()
         local player = game:GetService("Players").LocalPlayer
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local root = player.Character.HumanoidRootPart
-            local pos = root.Position
+            local pos  = root.Position
             root.CFrame = CFrame.new(pos.X, pos.Y + 5000, pos.Z)
         end
     end
 })
 
--- Tombol Teleport +10000Y
+-- Teleport +10000Y
 Test2Tab:CreateButton({
     Name = "Teleport +10000Y",
     Callback = function()
         local player = game:GetService("Players").LocalPlayer
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local root = player.Character.HumanoidRootPart
-            local pos = root.Position
+            local pos  = root.Position
             root.CFrame = CFrame.new(pos.X, pos.Y + 10000, pos.Z)
         end
     end
 })
 
--- Tombol Teleport +1000Z
+-- Teleport +1000Z
 Test2Tab:CreateButton({
     Name = "Teleport +1000Z",
     Callback = function()
         local player = game:GetService("Players").LocalPlayer
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local root = player.Character.HumanoidRootPart
-            local pos = root.Position
+            local pos  = root.Position
             root.CFrame = CFrame.new(pos.X, pos.Y, pos.Z + 1000)
         end
     end
 })
 
--- Tambahkan di bawah pembuatan tab “test2” untuk membuat tab “NoClip”
-
--- ─── TAB "NoClip" ────────────────────────────────────────────────────────────
+-- ===============================================
+-- TAB "NoClip"
+-- ===============================================
 local NoClipTab = Window:CreateTab("NoClip", nil)
 NoClipTab:CreateSection("NoClip Controls")
 
--- State untuk NoClip
 local noclipEnabled = false
 
--- Toggle untuk mengaktifkan atau menonaktifkan NoClip
+-- Toggle: Enable / Disable NoClip
 NoClipTab:CreateToggle({
     Name     = "Enable NoClip",
-    Flag     = "NoClipToggle",
-    Value    = false,
+    CurrentValue = false,
     Callback = function(value)
         noclipEnabled = value
         if not noclipEnabled then
-            -- Saat dinonaktifkan, kembalikan CanCollide ke true untuk semua bagian karakter
             local player = game:GetService("Players").LocalPlayer
             if player.Character then
                 for _, part in ipairs(player.Character:GetDescendants()) do
@@ -301,7 +295,7 @@ NoClipTab:CreateToggle({
     end
 })
 
--- Loop NoClip: setiap frame, jika diaktifkan, matikan CanCollide semua bagian karakter
+-- Setiap frame, matikan CanCollide semua part karakter jika noclipEnabled == true
 do
     local RunService = game:GetService("RunService")
     local Players    = game:GetService("Players")
@@ -318,214 +312,196 @@ do
         end
     end)
 end
--- ─── TAB "Auto" (Auto‐Aim + Input Max Distance + Smooth + Akurasi 100%) ─────────────────
+
+-- ===============================================
+-- TAB "Auto"  (Auto-Aim Lengkap dengan Fitur LOS)
+-- ===============================================
 local AutoTab = Window:CreateTab("Auto", nil)
 AutoTab:CreateSection("Auto Lock / Aim")
 
--- State untuk Auto Lock / Aim
-local lockEnabled      = false
-local maxDistance      = 50      -- Jarak maksimal (default 50 studs), sekarang lewat textbox
-local targetPartOption = "Head"  -- Pilihan: "Head" atau "Body"
-local originalCamType  = nil     -- Menyimpan CameraType sebelum auto‐aim
+local lockEnabled        = false
+local maxDistance        = 50      -- Jarak maksimal default (50 studs)
+local targetPartOption   = "Head"  -- Pilihan default: "Head" atau "Body"
+local checkLOS           = true    -- Pengecekan Line of Sight default: true
+local originalCamType    = nil     -- Simpan CameraType sebelum Auto Aim
 
--- Parameter tambahan untuk smoothing, prediksi, dan akurasi
-local smoothSpeed        = 0.15  -- (0 < smoothSpeed < 1). Semakin kecil = lebih halus, semakin besar = lebih “snap”.
-local predictionFactor   = 0.1   -- Prediksi posisi target (velocity * predictionFactor)
-local snapAngleThreshold = 0.01  -- Batas sudut (radian). Jika perbedaan sudut < 0.01 rad, langsung snap (100% akurat).
+-- Parameter tambahan:
+local smoothSpeed        = 0.15   -- (0 < smoothSpeed < 1)
+local predictionFactor   = 0.1    -- Prediksi posisi target (velocity * predictionFactor)
+local snapAngleThreshold = 0.01   -- Batas sudut (radian) untuk "snap" langsung
 
--- Toggle untuk mengaktifkan/mematikan Auto Aim
+-- 1) Toggle: Enable / Disable Auto Aim
 AutoTab:CreateToggle({
     Name     = "Enable Auto Aim",
-    Flag     = "AutoAimToggle",
-    Value    = false,
+    CurrentValue = false,
     Callback = function(value)
         lockEnabled = value
         local camera = workspace.CurrentCamera
-
         if lockEnabled then
-            -- Simpan CameraType saat ini, lalu set jadi Scriptable
             originalCamType = camera.CameraType
             camera.CameraType = Enum.CameraType.Scriptable
         else
-            -- Kembalikan CameraType ke semula
             camera.CameraType = originalCamType or Enum.CameraType.Custom
         end
     end
 })
 
--- Textbox untuk mengatur Max Distance (dalam stud)
-AutoTab:CreateTextbox({
-    Name            = "Max Distance",
-    Flag            = "MaxDistance",
-    Value           = tostring(maxDistance),
-    PlaceholderText = "Masukkan jarak maksimal (stud)",
-    Callback        = function(value)
-        local num = tonumber(value)
-        if num and num >= 0 then
-            maxDistance = num
-        else
-            -- Jika input bukan angka valid, kembalikan ke nilai sebelumnya
-            AutoTab:RefreshFlag("MaxDistance", tostring(maxDistance))
-        end
+-- 2) Toggle: Line of Sight Check
+AutoTab:CreateToggle({
+    Name     = "Line of Sight Check",
+    CurrentValue = checkLOS,
+    Callback = function(value)
+        checkLOS = value
     end
 })
 
--- Dropdown untuk memilih Part target: "Head" atau "Body"
+-- 3) Textbox: Max Distance (stud)
+local maxDistanceBox = AutoTab:CreateInput({
+    Name = "Max Distance",
+    PlaceholderText = tostring(maxDistance),
+    RemoveTextAfterFocusLost = false,
+    Callback = function(text)
+        local num = tonumber(text)
+        if num and num >= 0 then
+            maxDistance = num
+            maxDistanceBox:Set(tostring(num))
+        else
+            maxDistanceBox:Set(tostring(maxDistance))
+        end
+    end,
+})
+
+-- 4) Dropdown: Pilih "Head" atau "Body"
 AutoTab:CreateDropdown({
-    Name     = "Target Part",
-    Flag     = "TargetPartOption",
-    Options  = {"Head", "Body"},
-    Current  = targetPartOption,
-    Multi    = false,
+    Name = "Target Part",
+    Options = {"Head", "Body"},
+    CurrentOption = targetPartOption,
     Callback = function(option)
         targetPartOption = option
     end
 })
 
--- Slider untuk mengatur Smooth Speed (0.00 – 1.00)
+-- 5) Slider: Smooth Speed (0.00 - 1.00)
 AutoTab:CreateSlider({
-    Name         = "Smooth Speed",
-    SliderText   = "",
-    Range        = {0, 1},
-    Increment    = 0.01,
-    Suffix       = "",
+    Name = "Smooth Speed",
+    Range = {0, 1},
+    Increment = 0.01,
+    Suffix = "",
     CurrentValue = smoothSpeed,
-    Flag         = "SmoothSpeed",
-    Callback     = function(value)
+    Callback = function(value)
         smoothSpeed = value
     end
 })
 
--- (Opsional) Slider untuk mengatur Prediction Factor (0.00 – 1.00), jika dibutuhkan
--- AutoTab:CreateSlider({
---     Name         = "Prediction Factor",
---     SliderText   = "",
---     Range        = {0, 1},
---     Increment    = 0.01,
---     Suffix       = "",
---     CurrentValue = predictionFactor,
---     Flag         = "PredictionFactor",
---     Callback     = function(value)
---         predictionFactor = value
---     end
--- })
+-- 6) Slider: Prediction Factor (0.00 - 1.00)
+AutoTab:CreateSlider({
+    Name = "Prediction Factor",
+    Range = {0, 1},
+    Increment = 0.01,
+    Suffix = "",
+    CurrentValue = predictionFactor,
+    Callback = function(value)
+        predictionFactor = value
+    end
+})
 
--- (Opsional) Slider untuk mengatur Snap Angle Threshold (0.001 – 0.1 rad), 
--- jika ingin ubah batas sudut “snap” agar lebih ketat/longgar.
--- AutoTab:CreateSlider({
---     Name         = "Snap Angle Threshold",
---     SliderText   = "",
---     Range        = {0.001, 0.1},
---     Increment    = 0.001,
---     Suffix       = "",
---     CurrentValue = snapAngleThreshold,
---     Flag         = "SnapAngle",
---     Callback     = function(value)
---         snapAngleThreshold = value
---     end
--- })
+-- 7) Slider: Snap Angle Threshold (0.001 - 0.1 rad)
+AutoTab:CreateSlider({
+    Name = "Snap Angle Threshold",
+    Range = {0.001, 0.1},
+    Increment = 0.001,
+    Suffix = "",
+    CurrentValue = snapAngleThreshold,
+    Callback = function(value)
+        snapAngleThreshold = value
+    end
+})
 
--- Fungsi bantu: periksa apakah pemain dapat di‐aim
--- Kriteria:
--- 1) Bukan teman (friend) atau satu Team
--- 2) Tidak memiliki ForceField (immune)
--- 3) Memiliki Humanoid dan Health > 0
+-- Fungsi bantu: periksa apakah pemain "otherPlayer" valid untuk di-aim
 local function canBeTargeted(localPlayer, otherPlayer)
-    if not otherPlayer.Character then
-        return false
-    end
-
-    -- 1) Cek friend / team
-    if localPlayer:IsFriendsWith(otherPlayer.UserId) then
-        return false
-    end
+    if not otherPlayer.Character then return false end
+    
+    -- Cek jika di dalam satu team
     if localPlayer.Team and otherPlayer.Team and localPlayer.Team == otherPlayer.Team then
         return false
     end
-
+    
+    -- Cek ForceField
     local otherChar = otherPlayer.Character
-
-    -- 2) Cek ForceField
-    if otherChar:FindFirstChild("ForceField") then
-        return false
-    end
-
-    -- 3) Cek Humanoid dan Health > 0
+    if otherChar:FindFirstChild("ForceField") then return false end
+    
+    -- Cek Humanoid & Health > 0
     local humanoid = otherChar:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then
-        return false
-    end
-
+    if not humanoid or humanoid.Health <= 0 then return false end
+    
     return true
 end
 
--- Fungsi tambahan: periksa line‐of‐sight (LOS) antara kamera lokal dengan targetPart
--- Mengembalikan true jika ray menuju targetPart tidak terhalang objek lain
+-- Fungsi bantu: cek line-of-sight (LOS) antara kamera lokal dan targetPart
 local function hasLineOfSight(localPlayer, targetPart)
-    if not targetPart then
-        return false
-    end
-
-    local camera = workspace.CurrentCamera
-    local origin = camera.CFrame.Position
+    if not targetPart then return false end
+    local camera    = workspace.CurrentCamera
+    local origin    = camera.CFrame.Position
     local direction = (targetPart.Position - origin)
-
-    -- Siapkan RaycastParams untuk mengabaikan karakter pemain sendiri
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     rayParams.FilterDescendantsInstances = { localPlayer.Character }
     rayParams.IgnoreWater = true
-
-    local rayResult = workspace:Raycast(origin, direction, rayParams)
-    if rayResult and rayResult.Instance then
-        -- Jika objek pertama yang kena adalah bagian dari karakter target, maka LOS ada
-        if rayResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return true
-        else
-            return false
+    
+    local rayResult = workspace:Raycast(origin, direction.Unit * direction.Magnitude, rayParams)
+    if rayResult then
+        -- Cek apakah yang terkena raycast adalah target atau bagian dari target
+        local hitPart = rayResult.Instance
+        while hitPart do
+            if hitPart == targetPart or hitPart:IsDescendantOf(targetPart.Parent) then
+                return true
+            end
+            hitPart = hitPart.Parent
         end
+        return false
     end
-
-    -- Jika rayResult nil (tidak menabrak apa‐apa) maka LOS dianggap terhalang
-    return false
+    return true
 end
 
--- Fungsi menemukan pemain terdekat dalam maxDistance, dengan pengecekan canBeTargeted() + LOS
+-- Fungsi: cari pemain terdekat dalam maxDistance, dengan pengecekan canBeTargeted + LOS
 local function findNearestTarget()
     local Players     = game:GetService("Players")
     local localPlayer = Players.LocalPlayer
-    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil, nil
-    end
-
-    local rootPos       = localPlayer.Character.HumanoidRootPart.Position
+    
+    if not localPlayer.Character then return nil, nil end
+    local root = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil, nil end
+    
+    local rootPos       = root.Position
     local nearestDist   = maxDistance
     local nearestPlayer = nil
     local nearestPart   = nil
 
     for _, other in ipairs(Players:GetPlayers()) do
-        if other ~= localPlayer and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
-            if canBeTargeted(localPlayer, other) then
-                -- Tentukan targetPart (Head atau Body)
+        if other ~= localPlayer and other.Character then
+            local otherRoot = other.Character:FindFirstChild("HumanoidRootPart")
+            if otherRoot and canBeTargeted(localPlayer, other) then
                 local targetPart = nil
                 if targetPartOption == "Head" then
                     targetPart = other.Character:FindFirstChild("Head")
                 else
-                    -- Gunakan HumanoidRootPart sebagai "Body"
-                    targetPart = other.Character:FindFirstChild("HumanoidRootPart")
+                    targetPart = otherRoot
                 end
 
                 if targetPart then
-                    -- Cek jarak (dari HumanoidRootPart)
-                    local otherPos = other.Character.HumanoidRootPart.Position
-                    local dist = (rootPos - otherPos).Magnitude
-                    if dist <= nearestDist then
-                        -- Cek line‐of‐sight
-                        if hasLineOfSight(localPlayer, targetPart) then
-                            nearestDist   = dist
-                            nearestPlayer = other
-                            nearestPart   = targetPart
-                        end
+                    local otherPos = otherRoot.Position
+                    local dist     = (rootPos - otherPos).Magnitude
+                    
+                    -- Cek jarak dan line of sight (jika diaktifkan)
+                    local losCheck = true
+                    if checkLOS then
+                        losCheck = hasLineOfSight(localPlayer, targetPart)
+                    end
+                    
+                    if dist <= nearestDist and losCheck then
+                        nearestDist   = dist
+                        nearestPlayer = other
+                        nearestPart   = targetPart
                     end
                 end
             end
@@ -535,47 +511,52 @@ local function findNearestTarget()
     return nearestPlayer, nearestPart
 end
 
--- Loop RenderStepped untuk auto‐aim saat aktif
+-- RenderStepped: jalankan Auto-Aim jika lockEnabled == true
 game:GetService("RunService").RenderStepped:Connect(function()
-    if not lockEnabled then
-        return
-    end
-
+    if not lockEnabled then return end
+    
     local camera      = workspace.CurrentCamera
     local localPlayer = game:GetService("Players").LocalPlayer
+    
+    -- Pastikan karakter ada sebelum melanjutkan
+    if not localPlayer.Character then return end
+    
     local targetPlayer, targetPart = findNearestTarget()
 
     if targetPlayer and targetPart then
-        -- Posisi kamera saat ini
         local camPos = camera.CFrame.Position
 
         -- Prediksi posisi target: posisi sekarang + velocity * predictionFactor
         local predictedPos
         if targetPart:IsA("BasePart") then
-            local velocity = targetPart.Velocity or Vector3.new(0, 0, 0)
-            predictedPos = targetPart.Position + velocity * predictionFactor
+            local velocity   = targetPart.Velocity or Vector3.new(0,0,0)
+            predictedPos     = targetPart.Position + velocity * predictionFactor
         else
-            predictedPos = targetPart.Position
+            predictedPos     = targetPart.Position
         end
 
-        -- Buat CFrame “desired” untuk mengarah ke posisi prediksi
+        -- Buat "desiredCFrame" agar kamera mengarah ke prediksi
         local desiredCFrame = CFrame.new(camPos, predictedPos)
 
-        -- INTERPOLASI (lerp) untuk smooth movement
+        -- Interpolasi (lerp) dengan smoothSpeed
         local newCFrame = camera.CFrame:Lerp(desiredCFrame, smoothSpeed)
         camera.CFrame = newCFrame
 
-        -- Setelah lerp, cek seberapa dekat sudut antara arah kamera sekarang dan arah ke target
+        -- Hitung sudut antara arah kamera sekarang dan arah ke target
         local currentLook = newCFrame.LookVector
         local desiredDir  = (predictedPos - camPos).Unit
         local dotValue    = currentLook:Dot(desiredDir)
-        -- dotValue = 1 artinya sudut 0°, semakin mendekati 1 semakin kecil sudut
-        -- Hitung sudut: acos(dotValue)
-        local angle = math.acos( math.clamp(dotValue, -1, 1) )
+        local angle       = math.acos(math.clamp(dotValue, -1, 1))
 
-        -- Jika sudut < snapAngleThreshold (misalnya 0.01 rad ≈ 0.57°), maka langsung snap
+        -- Jika sudut < snapAngleThreshold, langsung snap agar sangat akurat
         if angle < snapAngleThreshold then
             camera.CFrame = desiredCFrame
         end
     end
 end)
+
+-- ===============================================
+-- LOADER SELESAI
+-- ===============================================
+Rayfield:LoadConfiguration() -- Memuat konfigurasi terakhir jika ada
+Rayfield:Notify("HXEL Loaded!", "Script berhasil dijalankan", 4483362458)
